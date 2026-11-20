@@ -94,17 +94,18 @@ YAPABİLDİKLERİN: Sohbet, genel kültür, felsefe, havacılık, bilim, analiz,
 
 Türkçe konuş, kısa ve net ol. Tarih: {now}"""
 
-# ─── TEK-TURLU SOHBET: 5 SAGLAYICI DUSEN SIRA ─────────────────────
-# multi_agent.py'daki caller'lari (_call_groq vb.) DOGRUDAN reuse ediyoruz -
-# ayni rate-limit / hata yakalama mantigi burada da gecerli.
-_PROVIDER_CHAIN = [
-    ("Qwen3.6", multi_agent._call_qwen),
-    ("Groq", multi_agent._call_groq),
-    ("Cerebras", multi_agent._call_cerebras),
-    ("Gemini", multi_agent._call_gemini),
-    ("SambaNova", multi_agent._call_sambanova),
-    ("OpenRouter", multi_agent._call_openrouter),
+# ─── TEK-TURLU SOHBET: SAĞLAYICI DÜŞEN SIRA (FALLBACK ZİNCİRİ) ────
+# multi_agent.py'daki caller'lari (_call_groq, _call_gemini vb.) DOGRUDAN reuse ediyoruz.
+# _call_qwen kaldirildi; dinamik getattr ile guvenli liste olusturulur.
+_CANDIDATE_PROVIDERS = [
+    ("Groq", getattr(multi_agent, "_call_groq", None)),
+    ("Cerebras", getattr(multi_agent, "_call_cerebras", None)),
+    ("Gemini", getattr(multi_agent, "_call_gemini", None)),
+    ("SambaNova", getattr(multi_agent, "_call_sambanova", None)),
+    ("NVIDIA", getattr(multi_agent, "_call_deepseek_v4", None)),
+    ("OpenRouter", getattr(multi_agent, "_call_openrouter", None)),
 ]
+_PROVIDER_CHAIN = [(name, caller) for name, caller in _CANDIDATE_PROVIDERS if caller is not None]
 
 async def chat_waterfall(history: list):
     """Sohbet gecmisini alir, ilk basarili saglayicinin cevabini doner.
@@ -263,4 +264,6 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("PORT", 8000))
+    print(f"[ALES CLOUD] Starting server on 0.0.0.0:{port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)

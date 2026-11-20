@@ -80,6 +80,71 @@ _call_deepseek_v4_flash = functools.partial(_call_nvidia, model="deepseek-ai/dee
 _call_glm51 = functools.partial(_call_nvidia, model="zhipuai/glm-5.1")
 _call_qwen3_coder = functools.partial(_call_nvidia, model="qwen/qwen3-coder-480b-a35b-instruct")
 
+async def _call_groq(prompt: str, system: str) -> tuple[bool, str]:
+    """Groq Cloud Llama-3.3-70b cagiricisi."""
+    try:
+        from config_manager import get_key
+        key = get_key("groq_key") or os.environ.get("GROQ_API_KEY", "")
+        if not key:
+            return False, "Groq key eksik"
+        try:
+            from groq import AsyncGroq
+            client = AsyncGroq(api_key=key)
+        except ImportError:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=key)
+
+        for attempt in range(3):
+            try:
+                r = await client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": prompt}],
+                    max_tokens=1500, temperature=0.6,
+                )
+                return True, (r.choices[0].message.content or "").strip()
+            except Exception as e:
+                if _is_rate_limit(e):
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    return False, f"Groq hata: {e}"
+        return False, "Groq: rate limit asildi"
+    except Exception as e:
+        return False, f"Groq beklenmeyen hata: {e}"
+
+
+async def _call_cerebras(prompt: str, system: str) -> tuple[bool, str]:
+    """Cerebras Cloud Llama-3.1-70b cagiricisi."""
+    try:
+        from config_manager import get_key
+        key = get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY", "")
+        if not key:
+            return False, "Cerebras key eksik"
+        try:
+            from cerebras.cloud.sdk import AsyncCerebras
+            client = AsyncCerebras(api_key=key)
+        except ImportError:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(base_url="https://api.cerebras.ai/v1", api_key=key)
+
+        for attempt in range(3):
+            try:
+                r = await client.chat.completions.create(
+                    model="llama3.1-70b",
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": prompt}],
+                    max_tokens=1500, temperature=0.6,
+                )
+                return True, (r.choices[0].message.content or "").strip()
+            except Exception as e:
+                if _is_rate_limit(e):
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    return False, f"Cerebras hata: {e}"
+        return False, "Cerebras: rate limit asildi"
+    except Exception as e:
+        return False, f"Cerebras beklenmeyen hata: {e}"
+
 async def _call_gemini(prompt: str, system: str) -> tuple[bool, str]:
     """Google Gemini (gemini-2.0-flash) OpenAI-uyumlu endpoint uzerinden.
     main.py, Groq+Cerebras ikisi de duştugunde duz-metin yedegi olarak
