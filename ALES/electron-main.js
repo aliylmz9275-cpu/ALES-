@@ -56,6 +56,22 @@ function getConfigPath() {
 }
 
 function startBackend() {
+  if (process.platform === 'win32') {
+    try {
+      const out = execSync('netstat -ano | findstr :8000').toString()
+      for (const line of out.trim().split('\n')) {
+        if (line.includes('LISTENING')) {
+          const parts = line.trim().split(/\s+/)
+          const pid = parts[parts.length - 1]
+          if (pid && pid !== '0' && pid !== String(process.pid)) {
+            log('[ALES] Port 8000 zombi süreç temizleniyor, PID:', pid)
+            try { execSync('taskkill /pid ' + pid + ' /T /F') } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   const exePath = getBackendPath()
   const backendDir = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'backend')
   const configPath = getConfigPath()

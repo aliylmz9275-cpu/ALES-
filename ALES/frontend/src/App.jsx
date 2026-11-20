@@ -64,21 +64,21 @@ function CloudGate({ onOk }) {
     setChecking(true); setErr('')
     try {
       const r = await fetch(API_URL + '/status', { headers: { 'X-ALES-Key': val.trim() } })
-      if (r.status === 401) { setErr('Kod yanlis.'); setChecking(false); return }
+      if (r.status === 401) { setErr('Kod yanlış.'); setChecking(false); return }
       setCloudKey(val.trim())
       onOk()
-    } catch { setErr('Sunucuya ulasilamadi.'); }
+    } catch { setErr('Sunucuya ulaşılamadı.'); }
     setChecking(false)
   }
   return (
-    <div style={{width:'100vw',height:'100vh',background:'#000',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,padding:20}}>
-      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:22,color:'#fff',letterSpacing:3}}>ALES</div>
-      <div style={{fontSize:11,color:'#ffffff55',fontFamily:'monospace',textAlign:'center'}}>Bu cihaz icin erisim kodunu gir</div>
+    <div style={{width:'100vw',height:'100vh',background:'#121212',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16,padding:20}}>
+      <div style={{fontFamily:"'Share Tech Mono',monospace",fontSize:28,color:'#ffffff',letterSpacing:3}}>ALES</div>
+      <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',textAlign:'center'}}>Bu cihaz için erişim kodunu girin</div>
       <input autoFocus type="password" value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()}
-        style={{...selectStyle, width:220, textAlign:'center', letterSpacing:2}} placeholder="ERISIM KODU" />
-      {err && <div style={{fontSize:10,color:'#999'}}>{err}</div>}
-      <button onClick={submit} disabled={checking} style={{padding:'8px 20px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.08)',color:'#fff',borderRadius:6,cursor:'pointer',fontFamily:'monospace',fontSize:11}}>
-        {checking?'KONTROL EDILIYOR...':'GIRIS'}
+        style={{...selectStyle, width:240, textAlign:'center', letterSpacing:2, background:'#1E1E24', color:'#ffffff', fontSize:14}} placeholder="ERİŞİM KODU" />
+      {err && <div style={{fontSize:12,color:'#f87171'}}>{err}</div>}
+      <button onClick={submit} disabled={checking} style={{padding:'10px 24px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.14)',color:'#ffffff',borderRadius:8,cursor:'pointer',fontFamily:'monospace',fontSize:13,fontWeight:600}}>
+        {checking?'KONTROL EDİLİYOR...':'GİRİŞ'}
       </button>
     </div>
   )
@@ -236,7 +236,7 @@ function OnboardingModal({ isOpen = true, onDone }) {
     <div style={{
       position: 'fixed',
       inset: 0,
-      background: 'rgba(0,0,0,0.88)',
+      background: 'rgba(0,0,0,0.85)',
       backdropFilter: 'blur(12px)',
       display: 'flex',
       alignItems: 'center',
@@ -245,12 +245,12 @@ function OnboardingModal({ isOpen = true, onDone }) {
       fontFamily: "'Inter', sans-serif"
     }}>
       <div style={{
-        width: 450,
+        width: 460,
         maxWidth: '92vw',
         padding: '32px 28px',
-        background: '#0d0d0d',
-        border: '1px solid rgba(255,255,255,0.18)',
-        borderRadius: 18,
+        background: '#1E1E24',
+        border: '1px solid rgba(255,255,255,0.22)',
+        borderRadius: 16,
         boxShadow: '0 24px 64px rgba(0,0,0,0.9)',
         display: 'flex',
         flexDirection: 'column',
@@ -260,8 +260,8 @@ function OnboardingModal({ isOpen = true, onDone }) {
         {/* Logo & Header */}
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <div style={{
-            width: 42,
-            height: 42,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             background: 'linear-gradient(135deg, #444, #fff)',
             display: 'flex',
@@ -275,33 +275,33 @@ function OnboardingModal({ isOpen = true, onDone }) {
             A
           </div>
           <div>
-            <div style={{fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: 1}}>ALES'e Hoş Geldiniz</div>
-            <div style={{fontSize: 10, color: '#888', fontFamily: 'monospace', letterSpacing: 2}}>HIZLI KURULUM & DOĞRULAMA</div>
+            <div style={{fontSize: 18, fontWeight: 700, color: '#ffffff', letterSpacing: 0.5}}>ALES'e Hoş Geldiniz</div>
+            <div style={{fontSize: 12, color: '#A1A1AA', fontFamily: 'monospace', letterSpacing: 1.5, marginTop: 2}}>HIZLI KURULUM & DOĞRULAMA</div>
           </div>
         </div>
 
         {/* Core Message */}
         <div style={{
           padding: '12px 14px',
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 10,
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: 8,
           fontSize: 13,
           lineHeight: 1.5,
-          color: '#f0f0f0'
+          color: '#E4E4E7'
         }}>
-          <b>ALES needs at least one API key to function.</b>
-          <div style={{fontSize: 11, color: '#999', marginTop: 4}}>
+          <b style={{color:'#ffffff'}}>ALES needs at least one API key to function.</b>
+          <div style={{fontSize: 12, color: '#A1A1AA', marginTop: 4}}>
             ALES'in yanıt verebilmesi ve modelleri çalıştırabilmesi için en az bir API anahtarı (Groq veya Gemini) gereklidir. Anahtarınızı girip bağlantıyı test edin.
           </div>
         </div>
 
         {/* Input Fields */}
-        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
           <div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#ccc',fontFamily:'monospace'}}>Groq API Key (Önerilen)</label>
-              <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{fontSize:10,color:'#38bdf8',textDecoration:'none',fontFamily:'monospace'}}>Key Al ↗</a>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <label style={{fontSize:13,fontWeight:600,color:'#E4E4E7',fontFamily:'monospace'}}>Groq API Key (Önerilen)</label>
+              <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{fontSize:12,color:'#38bdf8',textDecoration:'none',fontFamily:'monospace'}}>Key Al ↗</a>
             </div>
             <input
               type="password"
@@ -310,23 +310,23 @@ function OnboardingModal({ isOpen = true, onDone }) {
               onChange={e => { setGroqKey(e.target.value); setTestStatus('idle'); setTestMsg(''); }}
               style={{
                 width: '100%',
-                padding: '9px 12px',
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.15)',
+                padding: '10px 12px',
+                background: '#121212',
+                border: '1px solid rgba(255,255,255,0.22)',
                 borderRadius: 8,
-                color: '#fff',
-                fontSize: 12,
+                color: '#ffffff',
+                fontSize: 14,
                 fontFamily: 'monospace',
                 outline: 'none'
               }}
             />
-            <div style={{fontSize:9,color:'#777',marginTop:3}}>Ücretsiz, anlık ultra-hızlı Llama-3.3-70B modeli.</div>
+            <div style={{fontSize:12,color:'#A1A1AA',marginTop:4}}>Ücretsiz, anlık ultra-hızlı Llama-3.3-70B modeli.</div>
           </div>
 
           <div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#ccc',fontFamily:'monospace'}}>Gemini API Key</label>
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{fontSize:10,color:'#38bdf8',textDecoration:'none',fontFamily:'monospace'}}>Key Al ↗</a>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <label style={{fontSize:13,fontWeight:600,color:'#E4E4E7',fontFamily:'monospace'}}>Gemini API Key</label>
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{fontSize:12,color:'#38bdf8',textDecoration:'none',fontFamily:'monospace'}}>Key Al ↗</a>
             </div>
             <input
               type="password"
@@ -335,32 +335,32 @@ function OnboardingModal({ isOpen = true, onDone }) {
               onChange={e => { setGeminiKey(e.target.value); setTestStatus('idle'); setTestMsg(''); }}
               style={{
                 width: '100%',
-                padding: '9px 12px',
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.15)',
+                padding: '10px 12px',
+                background: '#121212',
+                border: '1px solid rgba(255,255,255,0.22)',
                 borderRadius: 8,
-                color: '#fff',
-                fontSize: 12,
+                color: '#ffffff',
+                fontSize: 14,
                 fontFamily: 'monospace',
                 outline: 'none'
               }}
             />
-            <div style={{fontSize:9,color:'#777',marginTop:3}}>Google AI Studio - Görme (Vision) ve genel zeka modeli.</div>
+            <div style={{fontSize:12,color:'#A1A1AA',marginTop:4}}>Google AI Studio - Görme (Vision) ve genel zeka modeli.</div>
           </div>
         </div>
 
         {/* Validation Status Display */}
         {testStatus === 'error' && (
           <div style={{
-            fontSize: 12,
-            color: '#ef4444',
+            fontSize: 13,
+            color: '#f87171',
             background: 'rgba(239,68,68,0.12)',
-            border: '1px solid rgba(239,68,68,0.25)',
-            padding: '8px 12px',
+            border: '1px solid rgba(239,68,68,0.3)',
+            padding: '10px 12px',
             borderRadius: 8,
             display: 'flex',
             alignItems: 'center',
-            gap: 6
+            gap: 8
           }}>
             ❌ {testMsg}
           </div>
@@ -368,36 +368,36 @@ function OnboardingModal({ isOpen = true, onDone }) {
 
         {testStatus === 'success' && (
           <div style={{
-            fontSize: 12,
-            color: '#10b981',
-            background: 'rgba(16,185,129,0.12)',
-            border: '1px solid rgba(16,185,129,0.25)',
-            padding: '8px 12px',
+            fontSize: 13,
+            color: '#4ade80',
+            background: 'rgba(74,222,128,0.12)',
+            border: '1px solid rgba(74,222,128,0.3)',
+            padding: '10px 12px',
             borderRadius: 8,
             display: 'flex',
             alignItems: 'center',
-            gap: 6
+            gap: 8
           }}>
             ✓ {testMsg}
           </div>
         )}
 
-        {err && <div style={{fontSize:11,color:'#f87171',background:'rgba(248,113,113,0.1)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
+        {err && <div style={{fontSize:12,color:'#f87171',background:'rgba(248,113,113,0.12)',padding:'8px 12px',borderRadius:6}}>{err}</div>}
 
         {/* Action Buttons */}
-        <div style={{display:'flex',gap:10,marginTop:6}}>
+        <div style={{display:'flex',gap:10,marginTop:8}}>
           <button
             onClick={testConnection}
             disabled={testing || (!groqKey.trim() && !geminiKey.trim())}
             style={{
               flex: 1,
-              padding: '11px',
-              background: 'rgba(255,255,255,0.08)',
+              padding: '12px',
+              background: 'rgba(255,255,255,0.12)',
               color: '#ffffff',
               fontWeight: 600,
-              border: '1px solid rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.3)',
               borderRadius: 8,
-              fontSize: 12,
+              fontSize: 13,
               fontFamily: 'monospace',
               cursor: (testing || (!groqKey.trim() && !geminiKey.trim())) ? 'not-allowed' : 'pointer',
               opacity: (testing || (!groqKey.trim() && !geminiKey.trim())) ? 0.4 : 1,
@@ -412,13 +412,13 @@ function OnboardingModal({ isOpen = true, onDone }) {
             disabled={testStatus !== 'success' || saving}
             style={{
               flex: 1,
-              padding: '11px',
-              background: testStatus === 'success' ? '#ffffff' : '#333333',
+              padding: '12px',
+              background: testStatus === 'success' ? '#ffffff' : 'rgba(255,255,255,0.15)',
               color: testStatus === 'success' ? '#000000' : '#888888',
               fontWeight: 700,
               border: 'none',
               borderRadius: 8,
-              fontSize: 12,
+              fontSize: 13,
               fontFamily: 'monospace',
               letterSpacing: 1,
               cursor: (testStatus !== 'success' || saving) ? 'not-allowed' : 'pointer',
@@ -1270,41 +1270,31 @@ export default function App() {
     : false
 
   return (
-    <div style={{width:'100vw',height:'100vh',background:'#000000',fontFamily:"'Inter',sans-serif",display:'flex',flexDirection:'column',overflow:'hidden',color:'#f0f0f0',userSelect:'none',position:'relative'}}>
+    <div className="app-container" style={{width:'100vw',height:'100vh',background:'#121212',fontFamily:"'Inter',sans-serif",display:'flex',flexDirection:'column',overflow:'hidden',color:'#E4E4E7',userSelect:'none',position:'relative'}}>
       {/* BG */}
-      <div style={{position:'absolute',inset:0,backgroundImage:'linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px)',backgroundSize:'52px 52px',pointerEvents:'none'}} />
-      <div style={{position:'absolute',top:-400,left:'50%',transform:'translateX(-50%)',width:900,height:700,background:'radial-gradient(ellipse,rgba(255,255,255,0.05) 0%,transparent 70%)',pointerEvents:'none'}} />
+      <div style={{position:'absolute',inset:0,backgroundImage:'linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)',backgroundSize:'52px 52px',pointerEvents:'none'}} />
+      <div style={{position:'absolute',top:-400,left:'50%',transform:'translateX(-50%)',width:900,height:700,background:'radial-gradient(ellipse,rgba(255,255,255,0.04) 0%,transparent 70%)',pointerEvents:'none'}} />
 
       {/* TITLEBAR */}
-      {/* METIN KESKINLIGI - backdropFilter'i GERI EKLEMEYIN.
-          Bu bar, sekme cubugu ve alt bar ESKIDEN backdropFilter:'blur(10px)'
-          + rgba(0,0,0,0.9) kullaniyordu. Chromium bir elemani ayri bilesik
-          katmana aldiginda (backdrop-filter, transform, saydam arkaplan)
-          o katmandaki metni LCD alt-piksel yumusatmadan CIKARIP gri
-          tonlamaya duser -- Windows'ta bu "hafif pikselli / tirtikli yazi"
-          olarak gorunuyordu. Govde zaten #000 oldugu icin blur'un
-          gosterecegi bir sey yoktu ve 0.9 alfa da #000 uzerinde #000'a
-          esitti; ikisini birakmak GORUNTUYU HIC DEGISTIRMEDI, yalnizca
-          keskinligi geri verdi. */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',height:48,background:'#000000',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,zIndex:10,WebkitAppRegion:'drag'}}>
+      <div className="app-titlebar" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',height:48,background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,zIndex:10,WebkitAppRegion:'drag'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:22,height:22,borderRadius:'50%',background:'radial-gradient(circle,#bbbbbb,#ffffff)',boxShadow:'0 0 10px #ffffff',animation:'pulse 2s infinite'}} />
-          <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:15,fontWeight:700,color:'#fff',letterSpacing:5}}>ALES</span>
-          <span style={{fontSize:8,color:'#ffffff66',fontFamily:'monospace'}}>v3.0</span>
+          <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:16,fontWeight:700,color:'#ffffff',letterSpacing:5}}>ALES</span>
+          <span style={{fontSize:10,color:'#A1A1AA',fontFamily:'monospace'}}>v3.0</span>
         </div>
-        {!isFloat && <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-          <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:16,color:'#f0f0f0',letterSpacing:2}}>{fmt(time)}</span>
-          <span style={{fontSize:8,color:'#ffffff33',letterSpacing:1}}>{fmtDate(time)}</span>
+        {!isFloat && <div className="app-titlebar-time" style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+          <span style={{fontFamily:"'Share Tech Mono',monospace",fontSize:16,color:'#E4E4E7',letterSpacing:2}}>{fmt(time)}</span>
+          <span style={{fontSize:10,color:'#A1A1AA',letterSpacing:1}}>{fmtDate(time)}</span>
         </div>}
-        <div style={{display:'flex',alignItems:'center',gap:7,WebkitAppRegion:'no-drag'}}>
-          {speaking && <span style={{fontSize:8,padding:'2px 7px',borderRadius:8,background:'rgba(255,255,255,0.3)',color:'#dddddd',fontFamily:'monospace',animation:'pulse 1s infinite'}}>SES</span>}
-          {skillProposals>0 && <span title="Onay bekleyen beceri önerisi" onClick={()=>setShowSettings(true)} style={{fontSize:8,padding:'2px 7px',borderRadius:8,background:'rgba(255,255,255,0.16)',color:'#dddddd',fontFamily:'monospace',cursor:'pointer'}}>{skillProposals} BECERİ</span>}
-          {approvals.length>0 && <span style={{fontSize:8,padding:'2px 7px',borderRadius:8,background:'rgba(200,200,200,0.3)',color:'#cccccc',fontFamily:'monospace',animation:'pulse 1s infinite'}}>{approvals.length} ONAY</span>}
-          <div style={{width:6,height:6,borderRadius:'50%',background:connected?'#ffffff':'#666666',boxShadow:connected?'0 0 6px #ffffff':'none'}} />
-          <div style={{display:'flex',gap:4}}>
-            <button style={{width:26,height:26,borderRadius:5,background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.25)',color:'#ffffff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setShowSettings(s=>!s)} title="Ayarlar">⚙</button>
+        <div style={{display:'flex',alignItems:'center',gap:8,WebkitAppRegion:'no-drag'}}>
+          {speaking && <span style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(255,255,255,0.2)',color:'#ffffff',fontFamily:'monospace',animation:'pulse 1s infinite'}}>SES</span>}
+          {skillProposals>0 && <span title="Onay bekleyen beceri önerisi" onClick={()=>setShowSettings(true)} style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(255,255,255,0.16)',color:'#ffffff',fontFamily:'monospace',cursor:'pointer'}}>{skillProposals} BECERİ</span>}
+          {approvals.length>0 && <span style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,200,200,0.3)',color:'#ffffff',fontFamily:'monospace',animation:'pulse 1s infinite'}}>{approvals.length} ONAY</span>}
+          <div style={{width:8,height:8,borderRadius:'50%',background:connected?'#4ade80':'#666666',boxShadow:connected?'0 0 6px #4ade80':'none'}} />
+          <div style={{display:'flex',gap:6}}>
+            <button style={{width:28,height:28,borderRadius:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',color:'#ffffff',fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setShowSettings(s=>!s)} title="Ayarlar">⚙</button>
             {isElectron && [{i:'⊡',a:()=>window.ales?.toggleFloat?.()},{i:'─',a:()=>window.ales?.minimize?.()},{i:'✕',a:()=>window.ales?.close?.(),r:true}].map((b,idx)=>(
-              <button key={idx} style={{width:26,height:26,borderRadius:5,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.18)',color:b.r?'#ff6b6b':'#ffffff',fontSize:12,cursor:'pointer'}} onClick={b.a}>{b.i}</button>
+              <button key={idx} style={{width:28,height:28,borderRadius:6,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.18)',color:b.r?'#ff6b6b':'#ffffff',fontSize:13,cursor:'pointer'}} onClick={b.a}>{b.i}</button>
             ))}
           </div>
         </div>
@@ -1323,26 +1313,26 @@ export default function App() {
                 chars={streamPreview.length} hidden={hudHidden||isFloat} />
 
       {/* APPROVALS */}
-      {approvals.length>0 && <div style={{background:'rgba(200,200,200,0.06)',borderBottom:'1px solid rgba(200,200,200,0.15)',padding:'6px 14px',flexShrink:0}}>
+      {approvals.length>0 && <div style={{background:'#1E1E24',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'8px 16px',flexShrink:0}}>
         {approvals.map(ap=>(
-          <div key={ap.id} style={{padding:'3px 0'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
-              <span style={{fontSize:11,color:'#dddddd',flex:1,cursor:'pointer'}} onClick={()=>setExpandedApproval(p=>p===ap.id?null:ap.id)}>⚠ {ap.description} <span style={{color:'#777',fontSize:9}}>({expandedApproval===ap.id?'detayı gizle':'detay'})</span></span>
-              <div style={{display:'flex',gap:5}}>
-                <button onClick={async()=>{await authFetch(`${API_URL}/approve/${ap.id}`,{method:'POST'});setApprovals(p=>p.filter(a=>a.id!==ap.id))}} style={{padding:'3px 10px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.07)',color:'#ffffff',borderRadius:5,cursor:'pointer',fontSize:10,fontFamily:'monospace'}}>ONAYLA</button>
-                <button onClick={async()=>{await authFetch(`${API_URL}/approve/${ap.id}`,{method:'DELETE'});setApprovals(p=>p.filter(a=>a.id!==ap.id))}} style={{padding:'3px 10px',border:'1px solid rgba(102,102,102,0.3)',background:'rgba(102,102,102,0.07)',color:'#666666',borderRadius:5,cursor:'pointer',fontSize:10,fontFamily:'monospace'}}>REDDET</button>
+          <div key={ap.id} style={{padding:'4px 0'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+              <span style={{fontSize:13,color:'#E4E4E7',flex:1,cursor:'pointer'}} onClick={()=>setExpandedApproval(p=>p===ap.id?null:ap.id)}>⚠ {ap.description} <span style={{color:'#A1A1AA',fontSize:11}}>({expandedApproval===ap.id?'detayı gizle':'detay'})</span></span>
+              <div style={{display:'flex',gap:6}}>
+                <button onClick={async()=>{await authFetch(`${API_URL}/approve/${ap.id}`,{method:'POST'});setApprovals(p=>p.filter(a=>a.id!==ap.id))}} style={{padding:'5px 12px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.12)',color:'#ffffff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'monospace'}}>ONAYLA</button>
+                <button onClick={async()=>{await authFetch(`${API_URL}/approve/${ap.id}`,{method:'DELETE'});setApprovals(p=>p.filter(a=>a.id!==ap.id))}} style={{padding:'5px 12px',border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.15)',color:'#f87171',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'monospace'}}>REDDET</button>
               </div>
             </div>
-            {expandedApproval===ap.id && <div style={{marginTop:4,marginBottom:2,padding:'6px 9px',background:'rgba(0,0,0,0.3)',borderRadius:6,fontSize:9,fontFamily:'monospace',color:'#999'}}>
-              <div><b style={{color:'#bbb'}}>işlem:</b> {ap.action}</div>
-              <div style={{marginTop:2,whiteSpace:'pre-wrap',wordBreak:'break-all'}}><b style={{color:'#bbb'}}>parametreler:</b> {JSON.stringify(ap.params, null, 2)}</div>
+            {expandedApproval===ap.id && <div style={{marginTop:6,marginBottom:4,padding:'8px 12px',background:'#121212',borderRadius:6,fontSize:12,fontFamily:'monospace',color:'#E4E4E7',border:'1px solid rgba(255,255,255,0.1)'}}>
+              <div><b style={{color:'#ffffff'}}>işlem:</b> {ap.action}</div>
+              <div style={{marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-all'}}><b style={{color:'#ffffff'}}>parametreler:</b> {JSON.stringify(ap.params, null, 2)}</div>
             </div>}
           </div>
         ))}
       </div>}
 
       {/* TABS */}
-      <div style={{display:'flex',alignItems:'center',padding:'0 12px',background:'#000000',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,height:38,gap:4}}>
+      <div className="app-tabs-bar" style={{display:'flex',alignItems:'center',padding:'0 12px',background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,height:40,gap:6,overflowX:'auto',whiteSpace:'nowrap',maxWidth:'100vw'}}>
         {[
           {id:'chat',label:'SOHBET'},
           {id:'history',label:'GEÇMİŞ'},
@@ -1355,25 +1345,25 @@ export default function App() {
           {id:'status',label:'DURUM'},
           {id:'advanced',label:'GELİŞMİŞ'},
         ].map(t=>(
-          <button key={t.id} style={{padding:'5px 12px',border:tab===t.id?'1px solid rgba(255,255,255,0.45)':'1px solid transparent',background:tab===t.id?'rgba(255,255,255,0.18)':'transparent',color:tab===t.id?'#ffffff':'#aaaaaa',fontFamily:'monospace',fontSize:11,fontWeight:tab===t.id?700:500,letterSpacing:1,cursor:'pointer',borderRadius:6,transition:'all .15s'}} onClick={()=>setTab(t.id)}>
+          <button key={t.id} className="app-tab-btn" style={{padding:'6px 12px',border:tab===t.id?'1px solid rgba(255,255,255,0.45)':'1px solid transparent',background:tab===t.id?'rgba(255,255,255,0.18)':'transparent',color:tab===t.id?'#ffffff':'#A1A1AA',fontFamily:'monospace',fontSize:12,fontWeight:tab===t.id?700:500,letterSpacing:1,cursor:'pointer',borderRadius:6,flexShrink:0,transition:'all .15s'}} onClick={()=>setTab(t.id)}>
             {t.label}
           </button>
         ))}
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-          <button onClick={startNewConversation} title="Yeni Sohbet" style={{padding:'4px 11px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.1)',color:'#ffffff',borderRadius:5,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'monospace'}}>+ YENİ</button>
-          <div style={{width:6,height:6,borderRadius:'50%',background:connected?'#4ade80':'#666666',boxShadow:connected?'0 0 6px #4ade80':'none'}} />
-          <span style={{fontSize:10,fontFamily:'monospace',color:'#cccccc',fontWeight:600}}>{connected?'BAĞLI':'BAĞLANIYOR'}</span>
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <button onClick={startNewConversation} title="Yeni Sohbet" style={{padding:'5px 12px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.12)',color:'#ffffff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'monospace'}}>+ YENİ</button>
+          <div style={{width:8,height:8,borderRadius:'50%',background:connected?'#4ade80':'#666666',boxShadow:connected?'0 0 6px #4ade80':'none'}} />
+          <span style={{fontSize:11,fontFamily:'monospace',color:'#E4E4E7',fontWeight:600}}>{connected?'BAĞLI':'BAĞLANIYOR'}</span>
         </div>
       </div>
 
       {/* MAIN */}
-      <main style={{flex:1,overflow:'hidden',position:'relative'}}>
+      <main style={{flex:1,overflow:'hidden',position:'relative',background:'#121212',color:'#E4E4E7'}}>
 
-        {tab==='chat' && <div style={{height:'100%',overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:9}}>
+        {tab==='chat' && <div style={{height:'100%',overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
           {messages.map(m=>(
-            <div key={m.id} style={{display:'flex',alignItems:'flex-end',gap:7,animation:'fadeUp .2s ease',justifyContent:m.role==='user'?'flex-end':'flex-start'}}>
-              {m.role!=='user' && <div style={{width:26,height:26,borderRadius:'50%',background:'linear-gradient(135deg,#111111,#222222)',border:'1px solid #ffffff33',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#cccccc',flexShrink:0,fontFamily:'monospace'}}>A</div>}
-              <div style={{maxWidth:'79%',padding:'8px 12px',borderRadius:12,fontSize:13,lineHeight:1.65,whiteSpace:'pre-wrap',wordBreak:'break-word',...(m.role==='user'?{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',color:'#f0f0f0',borderBottomRightRadius:3}:m.role==='error'?{background:'rgba(102,102,102,0.07)',border:'1px solid rgba(102,102,102,0.2)',color:'#aaaaaa',borderBottomLeftRadius:3}:{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',color:'#f0f0f0',borderBottomLeftRadius:3})}}>
+            <div key={m.id} style={{display:'flex',alignItems:'flex-end',gap:8,animation:'fadeUp .2s ease',justifyContent:m.role==='user'?'flex-end':'flex-start'}}>
+              {m.role!=='user' && <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#222222,#444444)',border:'1px solid rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#ffffff',flexShrink:0,fontFamily:'monospace'}}>A</div>}
+              <div className="chat-message-bubble" style={{maxWidth:'82%',padding:'10px 14px',borderRadius:12,fontSize:14,lineHeight:1.6,whiteSpace:'pre-wrap',wordBreak:'break-word',...(m.role==='user'?{background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.18)',color:'#ffffff',borderBottomRightRadius:3}:m.role==='error'?{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:'#f87171',borderBottomLeftRadius:3}:{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.15)',color:'#E4E4E7',borderBottomLeftRadius:3})}}>
                 {m.content}
               </div>
               {m.role!=='user' && (
@@ -1381,24 +1371,24 @@ export default function App() {
                   onClick={()=>playTTS(m.content)}
                   title="Sesli Oku"
                   style={{
-                    background:'rgba(255,255,255,0.04)',
-                    border:'1px solid rgba(255,255,255,0.1)',
-                    color:'#888',
+                    background:'rgba(255,255,255,0.08)',
+                    border:'1px solid rgba(255,255,255,0.15)',
+                    color:'#E4E4E7',
                     cursor:'pointer',
-                    fontSize:12,
-                    padding:'4px 6px',
+                    fontSize:13,
+                    padding:'5px 8px',
                     borderRadius:6,
                     flexShrink:0,
                     marginBottom:2,
                     transition:'all .15s'
                   }}
                   onMouseEnter={e=>e.currentTarget.style.color='#fff'}
-                  onMouseLeave={e=>e.currentTarget.style.color='#888'}
+                  onMouseLeave={e=>e.currentTarget.style.color='#E4E4E7'}
                 >
                   🔊
                 </button>
               )}
-              {m.role==='user' && <div style={{width:26,height:26,borderRadius:'50%',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,color:'#aaa',flexShrink:0,fontFamily:'monospace'}}>SEN</div>}
+              {m.role==='user' && <div style={{width:28,height:28,borderRadius:'50%',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:'#E4E4E7',fontWeight:600,flexShrink:0,fontFamily:'monospace'}}>SEN</div>}
             </div>
           ))}
           {activeTools.map(t=>(
@@ -1422,30 +1412,30 @@ export default function App() {
           <div ref={bottomRef} />
         </div>}
 
-        {tab==='history' && <div style={{height:'100%',overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:7}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-            <span style={{fontSize:9,color:'#cccccc',fontFamily:'monospace',letterSpacing:2}}>SOHBETLER — {conversations.length}</span>
-            <button onClick={startNewConversation} style={{padding:'4px 12px',border:'1px solid rgba(255,255,255,0.4)',background:'rgba(255,255,255,0.08)',color:'#fff',borderRadius:5,cursor:'pointer',fontSize:9,fontFamily:'monospace'}}>+ YENİ SOHBET</button>
+        {tab==='history' && <div style={{height:'100%',overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <span style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2}}>SOHBETLER — {conversations.length}</span>
+            <button onClick={startNewConversation} style={{padding:'6px 14px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.12)',color:'#ffffff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'monospace'}}>+ YENİ SOHBET</button>
           </div>
-          {conversations.length===0 && <div style={{color:'#ffffff15',fontSize:11,fontFamily:'monospace',textAlign:'center',marginTop:40}}>Henuz sohbet yok.</div>}
+          {conversations.length===0 && <div style={{color:'#A1A1AA',fontSize:13,fontFamily:'monospace',textAlign:'center',marginTop:40}}>Henüz sohbet yok.</div>}
           {conversations.map(c=>(
-            <div key={c.id} onClick={()=>openConversation(c.id)} style={{padding:'9px 11px',background:c.id===activeConvId?'rgba(255,255,255,0.09)':'rgba(255,255,255,0.03)',border:`1px solid ${c.id===activeConvId?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.08)'}`,borderRadius:8,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+            <div key={c.id} onClick={()=>openConversation(c.id)} style={{padding:'12px 14px',background:c.id===activeConvId?'rgba(255,255,255,0.12)':'#1E1E24',border:`1px solid ${c.id===activeConvId?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.12)'}`,borderRadius:8,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:12,color:'#f0f0f0',fontFamily:'monospace',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.title}</div>
-                <div style={{fontSize:9,color:'#ffffff33',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.preview}</div>
+                <div style={{fontSize:14,fontWeight:600,color:'#ffffff',fontFamily:'monospace',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.title}</div>
+                <div style={{fontSize:12,color:'#A1A1AA',marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.preview}</div>
               </div>
-              <button onClick={(e)=>deleteConversation(c.id,e)} style={{flexShrink:0,width:22,height:22,border:'1px solid rgba(255,255,255,0.15)',background:'transparent',color:'#999999',borderRadius:5,cursor:'pointer',fontSize:11}}>✕</button>
+              <button onClick={(e)=>deleteConversation(c.id,e)} style={{flexShrink:0,width:26,height:26,border:'1px solid rgba(255,255,255,0.2)',background:'transparent',color:'#E4E4E7',borderRadius:6,cursor:'pointer',fontSize:13}}>✕</button>
             </div>
           ))}
         </div>}
 
-        {tab==='log' && <div style={{height:'100%',overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:4}}>
-          <div style={{fontSize:9,color:'#cccccc',fontFamily:'monospace',letterSpacing:2,marginBottom:6}}>ALES NE YAPTI — SON {logs.length}</div>
-          {logs.length===0 && <div style={{color:'#ffffff15',fontSize:11,fontFamily:'monospace',textAlign:'center',marginTop:40}}>Henuz kayit yok.</div>}
+        {tab==='log' && <div style={{height:'100%',overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:6}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:8}}>ALES NE YAPTI — SON {logs.length}</div>
+          {logs.length===0 && <div style={{color:'#A1A1AA',fontSize:13,fontFamily:'monospace',textAlign:'center',marginTop:40}}>Henüz kayıt yok.</div>}
           {logs.map((l,i)=>(
-            <div key={i} style={{display:'flex',gap:8,alignItems:'baseline',padding:'3px 0',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-              <span style={{fontSize:9,color:'#ffffff33',fontFamily:'monospace',flexShrink:0,width:38}}>{new Date(l.time).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span>
-              <span style={{fontSize:11,color:'#cccccc'}}>{l.text}</span>
+            <div key={i} style={{display:'flex',gap:10,alignItems:'baseline',padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+              <span style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',flexShrink:0,width:46}}>{new Date(l.time).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span>
+              <span style={{fontSize:14,color:'#E4E4E7',lineHeight:1.5}}>{l.text}</span>
             </div>
           ))}
         </div>}
@@ -1454,29 +1444,29 @@ export default function App() {
           <div style={{position:'relative',height:260,flexShrink:0,overflow:'hidden',borderRadius:0,borderBottom:'1px solid rgba(255,255,255,0.12)'}}>
             <Worldview3D data={worldviewText} />
             <div style={{position:'absolute',bottom:12,right:12,display:'flex',gap:6,zIndex:3}}>
-              <button style={{padding:'4px 10px',border:'1px solid rgba(255,255,255,0.4)',background:'rgba(0,0,0,0.92)',color:'#cccccc',borderRadius:6,cursor:'pointer',fontSize:9,fontFamily:'monospace'}} onClick={()=>sendMessage('Guncel worldview bilgisini getir')}>↻ YENILE</button>
+              <button style={{padding:'6px 12px',border:'1px solid rgba(255,255,255,0.3)',background:'rgba(0,0,0,0.85)',color:'#ffffff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'monospace'}} onClick={()=>sendMessage('Guncel worldview bilgisini getir')}>↻ YENİLE</button>
             </div>
           </div>
-          <div style={{padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:10}}>
             {worldviewText ? (
               worldviewText.split('\n\n').filter(s=>s.trim()).map((sec,i)=>(
-                <div key={i} style={{padding:'10px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:9}}>
+                <div key={i} style={{padding:'12px 14px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:8}}>
                   {sec.split('\n').map((line,j)=>(
-                    <div key={j} style={{fontSize:11,fontFamily:'monospace',lineHeight:1.7,color:line.startsWith('[')&&line.includes(']:')?'#cccccc':line.startsWith('=')?'rgba(255,255,255,0.2)':'#bbbbbb'}}>{line}</div>
+                    <div key={j} style={{fontSize:13,fontFamily:'monospace',lineHeight:1.7,color:line.startsWith('[')&&line.includes(']:')?'#ffffff':line.startsWith('=')?'rgba(255,255,255,0.3)':'#E4E4E7'}}>{line}</div>
                   ))}
                 </div>
               ))
             ) : (
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',gap:10}}>
                 {[
                   {l:'Haberler',a:"Turkiyeden guncel haberleri getir"},
-                  {l:'Doviz',a:'Guncel doviz kurlarini getir'},
+                  {l:'Döviz',a:'Guncel doviz kurlarini getir'},
                   {l:'Kripto',a:'Bitcoin fiyatlarini getir'},
                   {l:'Hava',a:'Istanbul hava durumunu getir'},
                   {l:'Fiverr',a:'Fiverr gorevlerimi listele'},
                   {l:'Sistem',a:'Sistem bilgilerini goster'},
                 ].map(item=>(
-                  <button key={item.l} style={{padding:'16px 10px',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:9,color:'#aaaaaa',fontSize:11,cursor:'pointer',fontFamily:'monospace',transition:'all .15s'}} onClick={()=>sendMessage(item.a)}>{item.l}</button>
+                  <button key={item.l} style={{padding:'16px 12px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.15)',borderRadius:8,color:'#E4E4E7',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',transition:'all .15s'}} onClick={()=>sendMessage(item.a)}>{item.l}</button>
                 ))}
               </div>
             )}
@@ -1952,18 +1942,18 @@ export default function App() {
 
                 {/* Kaynak kirilimi */}
                 {(stats.earnings?.by_source||[]).length>0 && (
-                  <div style={{marginTop:10}}>
-                    <div style={{fontSize:9,color:'#888',fontFamily:'monospace',letterSpacing:1,marginBottom:6}}>KAYNAĞA GÖRE</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{marginTop:12}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>KAYNAĞA GÖRE</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
                       {stats.earnings.by_source.slice(0,6).map(s=>{
                         const max = Math.max(1, ...stats.earnings.by_source.map(x=>x.amount))
                         return (
-                          <div key={s.source} style={{display:'flex',alignItems:'center',gap:8}}>
-                            <div style={{width:110,fontSize:10,color:'#ccc',fontFamily:'monospace',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.source}</div>
-                            <div style={{flex:1,height:8,background:'rgba(255,255,255,0.05)',borderRadius:4,overflow:'hidden'}}>
-                              <div style={{width:`${(s.amount/max)*100}%`,height:'100%',background:'rgba(255,255,255,0.35)'}} />
+                          <div key={s.source} style={{display:'flex',alignItems:'center',gap:10}}>
+                            <div style={{width:130,fontSize:13,fontWeight:600,color:'#E4E4E7',fontFamily:'monospace',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.source}</div>
+                            <div style={{flex:1,height:8,background:'rgba(255,255,255,0.08)',borderRadius:4,overflow:'hidden'}}>
+                              <div style={{width:`${(s.amount/max)*100}%`,height:'100%',background:'rgba(255,255,255,0.45)'}} />
                             </div>
-                            <div style={{fontSize:9,color:'#888',fontFamily:'monospace',width:52,textAlign:'right'}}>{s.amount}</div>
+                            <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',width:60,textAlign:'right'}}>{s.amount}</div>
                           </div>
                         )
                       })}
@@ -1973,44 +1963,44 @@ export default function App() {
               </div>
 
               <div>
-                <div style={{fontSize:9,color:'#888',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>SON 14 GÜN AKTİVİTE</div>
+                <div style={{fontSize:12,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>SON 14 GÜN AKTİVİTE</div>
                 <div style={{display:'flex',alignItems:'flex-end',gap:3,height:60,padding:'0 2px'}}>
                   {(stats.activity_by_day||[]).map(d=>{
                     const max = Math.max(1, ...stats.activity_by_day.map(x=>x.count))
                     const h = Math.max(2, Math.round((d.count/max)*54))
                     return (
-                      <div key={d.date} title={`${d.date}: ${d.count}`} style={{flex:1,height:h,background:d.count>0?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.06)',borderRadius:2}} />
+                      <div key={d.date} title={`${d.date}: ${d.count}`} style={{flex:1,height:h,background:d.count>0?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.08)',borderRadius:2}} />
                     )
                   })}
                 </div>
               </div>
 
               <div>
-                <div style={{fontSize:9,color:'#888',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>SON 60 DAKİKA (İŞLEM / DK)</div>
+                <div style={{fontSize:12,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>SON 60 DAKİKA (İŞLEM / DK)</div>
                 <div style={{display:'flex',alignItems:'flex-end',gap:1,height:44,padding:'0 2px'}}>
                   {(stats.activity_by_minute||[]).map(d=>{
                     const max = Math.max(1, ...stats.activity_by_minute.map(x=>x.count))
                     const h = Math.max(1, Math.round((d.count/max)*40))
                     return (
-                      <div key={d.minute} title={`${d.minute}: ${d.count}`} style={{flex:1,height:h,background:d.count>0?'rgba(255,255,255,0.32)':'rgba(255,255,255,0.05)',borderRadius:1}} />
+                      <div key={d.minute} title={`${d.minute}: ${d.count}`} style={{flex:1,height:h,background:d.count>0?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.06)',borderRadius:1}} />
                     )
                   })}
                 </div>
               </div>
 
               <div>
-                <div style={{fontSize:9,color:'#888',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>EN ÇOK KULLANILAN ARAÇLAR</div>
-                <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                  {(stats.top_tools||[]).length===0 && <div style={{fontSize:11,color:'#666',fontFamily:'monospace'}}>Henüz veri yok.</div>}
+                <div style={{fontSize:12,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:8}}>EN ÇOK KULLANILAN ARAÇLAR</div>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {(stats.top_tools||[]).length===0 && <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace'}}>Henüz veri yok.</div>}
                   {(stats.top_tools||[]).map(t=>{
                     const max = Math.max(1, ...stats.top_tools.map(x=>x.count))
                     return (
-                      <div key={t.label} style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div style={{width:130,fontSize:10,color:'#ccc',fontFamily:'monospace',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.label}</div>
-                        <div style={{flex:1,height:8,background:'rgba(255,255,255,0.05)',borderRadius:4,overflow:'hidden'}}>
-                          <div style={{width:`${(t.count/max)*100}%`,height:'100%',background:'rgba(255,255,255,0.35)'}} />
+                      <div key={t.label} style={{display:'flex',alignItems:'center',gap:10}}>
+                        <div style={{width:140,fontSize:13,fontWeight:600,color:'#E4E4E7',fontFamily:'monospace',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.label}</div>
+                        <div style={{flex:1,height:8,background:'rgba(255,255,255,0.08)',borderRadius:4,overflow:'hidden'}}>
+                          <div style={{width:`${(t.count/max)*100}%`,height:'100%',background:'rgba(255,255,255,0.45)'}} />
                         </div>
-                        <div style={{fontSize:9,color:'#888',fontFamily:'monospace',width:22,textAlign:'right'}}>{t.count}</div>
+                        <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',width:30,textAlign:'right'}}>{t.count}</div>
                       </div>
                     )
                   })}
@@ -2029,21 +2019,21 @@ export default function App() {
       </main>
 
       {/* INPUT */}
-      <footer style={{padding:'8px 12px 10px',borderTop:'1px solid rgba(255,255,255,0.08)',background:'#000000',flexShrink:0}}>
-        <div style={{display:'flex',gap:6,alignItems:'flex-end'}}>
+      <footer className="chat-footer" style={{padding:'10px 14px 12px',borderTop:'1px solid rgba(255,255,255,0.12)',background:'#121212',flexShrink:0}}>
+        <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
           <button
             style={{
-              width:38,
-              height:38,
+              width:40,
+              height:40,
               flexShrink:0,
-              border:'1px solid ' + (listening ? '#ef4444' : 'rgba(255,255,255,0.08)'),
+              border:'1px solid ' + (listening ? '#ef4444' : 'rgba(255,255,255,0.2)'),
               borderRadius:8,
-              fontSize:15,
+              fontSize:16,
               cursor:'pointer',
               display:'flex',
               alignItems:'center',
               justifyContent:'center',
-              background:listening ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.04)',
+              background:listening ? 'rgba(239,68,68,0.25)' : '#1E1E24',
               boxShadow:listening ? '0 0 12px rgba(239,68,68,0.5)' : 'none',
               transition:'all .2s'
             }}
@@ -2052,8 +2042,8 @@ export default function App() {
           >
             🎤
           </button>
-          <textarea ref={inputRef} style={{flex:1,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:9,padding:'8px 11px',color:'#f0f0f0',fontSize:13,fontFamily:"'Inter',sans-serif",resize:'none',lineHeight:1.5,userSelect:'text',transition:'border-color .2s'}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={showOnboarding ? 'Lütfen önce API anahtarınızı kaydedin...' : (connected?(listening?'Dinleniyor...':"ALES'e yaz..."):'Backend baslatiliyor...')} disabled={!connected||thinking||showOnboarding} rows={1} />
-          <button style={{width:38,height:38,flexShrink:0,background:'#ffffff',border:'none',borderRadius:9,color:'#fff',fontSize:14,cursor:'pointer',boxShadow:'0 0 12px #ffffff33',opacity:(!connected||thinking||!input.trim()||showOnboarding)?0.25:1,transition:'opacity .2s'}} onClick={send} disabled={!connected||thinking||!input.trim()||showOnboarding}>▶</button>
+          <textarea ref={inputRef} className="chat-input" style={{flex:1,background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,padding:'10px 12px',color:'#E4E4E7',fontSize:14,fontFamily:"'Inter',sans-serif",resize:'none',lineHeight:1.5,userSelect:'text',transition:'border-color .2s'}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={showOnboarding ? 'Lütfen önce API anahtarınızı kaydedin...' : (connected?(listening?'Dinleniyor...':"ALES'e yaz..."):'Backend baslatiliyor...')} disabled={!connected||thinking||showOnboarding} rows={1} />
+          <button style={{width:40,height:40,flexShrink:0,background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 0 12px rgba(255,255,255,0.25)',opacity:(!connected||thinking||!input.trim()||showOnboarding)?0.25:1,transition:'opacity .2s'}} onClick={send} disabled={!connected||thinking||!input.trim()||showOnboarding}>▶</button>
         </div>
       </footer>
 
@@ -2183,30 +2173,30 @@ function ModeSelector() {
 
   return (
     <div style={{marginBottom:14,paddingBottom:12,borderBottom:'1px solid rgba(255,255,255,0.12)'}}>
-      <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>MOD SEÇİMİ</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+      <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>MOD SEÇİMİ</div>
+      <div className="responsive-grid-3" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(110px, 1fr))',gap:8,marginBottom:10}}>
         {(data.modes||[]).map(m=>(
           <button key={m.id} title={m.description} onClick={()=>pick(m.id)} disabled={busy}
-            style={{padding:'9px 8px',borderRadius:7,cursor:busy?'default':'pointer',fontFamily:'monospace',fontSize:12,fontWeight:m.active?700:500,
+            style={{padding:'10px 8px',borderRadius:7,cursor:busy?'default':'pointer',fontFamily:'monospace',fontSize:13,fontWeight:m.active?700:500,
                     border:'1px solid '+(m.active?'#ffffff':'rgba(255,255,255,0.2)'),
                     background:m.active?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.06)',
-                    color:m.active?'#ffffff':'#e0e0e0',opacity:busy&&!m.active?0.5:1}}>
+                    color:m.active?'#ffffff':'#E4E4E7',opacity:busy&&!m.active?0.5:1}}>
             {EMOJI[m.id]||'•'} {m.label}
           </button>
         ))}
       </div>
       {active?.description && (
-        <div style={{fontSize:12,color:'#d0d0d0',fontFamily:'monospace',marginBottom:8,lineHeight:1.5}}>{active.description}</div>
+        <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',marginBottom:8,lineHeight:1.5}}>{active.description}</div>
       )}
-      <div style={{fontSize:12,color:'#c0c0c0',fontFamily:'monospace',marginBottom:10,lineHeight:1.5}}>
+      <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:10,lineHeight:1.5}}>
         Zincir: {(data.active_chain||[]).map(l=>`${l.provider}/${(l.model||'').split('/').pop()}`).join(' → ') || '—'}
       </div>
-      <button onClick={()=>setShowT(s=>!s)} style={{background:'none',border:'none',color:'#ffffff',fontSize:12,fontWeight:600,fontFamily:'monospace',cursor:'pointer',padding:'4px 0'}}>
+      <button onClick={()=>setShowT(s=>!s)} style={{background:'none',border:'none',color:'#ffffff',fontSize:13,fontWeight:600,fontFamily:'monospace',cursor:'pointer',padding:'4px 0'}}>
         {showT?'▾':'▸'} ZAMAN AŞIMI (sn)
       </button>
       {showT && tdraft && (
         <div style={{marginTop:6}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,margin:'8px 0'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(95px, 1fr))',gap:8,margin:'8px 0'}}>
             {TKEYS.map(([k,lbl])=>(
               <label key={k} style={{fontSize:12,color:'#e0e0e0',fontFamily:'monospace'}}>{lbl}
                 <input type="number" step="0.5" min="0" value={tdraft[k]??''} onChange={e=>setTdraft(p=>({...p,[k]:e.target.value}))} style={nStyle} />
@@ -2453,7 +2443,7 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     setTimeout(()=>setTesting(false), 1500)
   }
 
-  const iStyle = {background:'#1e1e1e',border:'1px solid rgba(255,255,255,0.25)',borderRadius:7,padding:'9px 12px',color:'#ffffff',fontSize:14,fontFamily:'monospace',outline:'none',width:'100%',boxSizing:'border-box'}
+  const iStyle = {background:'#1E1E24',border:'1px solid rgba(255,255,255,0.22)',borderRadius:8,padding:'10px 12px',color:'#E4E4E7',fontSize:14,fontFamily:'monospace',outline:'none',width:'100%',boxSizing:'border-box'}
 
   // ─── CLOUD MOD: key'ler Railway/Render env degiskenlerinden geliyor,
   // bu ekrandan DUZENLENEMEZ - sadece durumu gosteriyoruz + cikis butonu.
@@ -2463,58 +2453,56 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
       {k:'has_sambanova',n:'SambaNova'},{k:'has_openrouter',n:'OpenRouter'},{k:'has_nvidia',n:'NVIDIA'},
     ]
     return (
-      <div style={{background:'rgba(0,0,0,0.97)',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'16px 18px',flexShrink:0,zIndex:9,maxHeight:'85vh',overflowY:'auto'}}>
+      <div className="settings-modal-content" style={{background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'18px 20px',flexShrink:0,zIndex:9,maxHeight:'85vh',overflowY:'auto',color:'#E4E4E7'}}>
         <ModeSelector />
-        <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>CLOUD DURUMU</div>
-        <div style={{fontSize:12,color:'#d0d0d0',fontFamily:'monospace',marginBottom:12,lineHeight:1.6}}>
+        <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>CLOUD DURUMU</div>
+        <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',marginBottom:12,lineHeight:1.6}}>
           Bu, ALES'in telefon/tarayıcı sürümü. API key'ler burada değil, sunucunun
           ortam değişkenlerinde (Railway/Render paneli) yönetilir.
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+        <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:10,marginBottom:14}}>
           {providers.map(p=>(
-            <div key={p.k} style={{...iStyle,display:'flex',alignItems:'center',gap:8}}>
+            <div key={p.k} style={{...iStyle,display:'flex',alignItems:'center',gap:10}}>
               <div style={{width:8,height:8,borderRadius:'50%',background:cloudStatus?.[p.k]?'#4ade80':'#666666'}} />
               {p.n}
             </div>
           ))}
         </div>
-        <button style={{width:'100%',padding:'10px',background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:7,color:'#ffffff',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'monospace'}} onClick={logoutCloud}>ERİŞİM KODUNU DEĞİŞTİR / ÇIKIŞ</button>
+        <button style={{width:'100%',padding:'11px',background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace'}} onClick={logoutCloud}>ERİŞİM KODUNU DEĞİŞTİR / ÇIKIŞ</button>
         <SkillsConnectorsPanel />
-        {/* Cloud modda da gosteriyoruz: eklenti/beceri/teshis hepsi SUNUCU
-            tarafinda calisir, telefondan yonetilmesi tamamen anlamli. */}
         <AdvancedPanel pendingSkills={pendingSkills} onSkillsChange={onSkillsChange} />
       </div>
     )
   }
 
   return (
-    <div style={{background:'rgba(0,0,0,0.97)',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'16px 18px',flexShrink:0,zIndex:9,maxHeight:'85vh',overflowY:'auto'}}>
+    <div className="settings-modal-content" style={{background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'18px 20px',flexShrink:0,zIndex:9,maxHeight:'85vh',overflowY:'auto',color:'#E4E4E7'}}>
       <ModeSelector />
-      <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>API AYARLARI</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>API AYARLARI</div>
+      <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10,marginBottom:14}}>
         {[{k:'groq',p:'Groq Key (gsk_...)'},{k:'cerebras',p:'Cerebras Key (csk_...)'},{k:'elevenlabs',p:'ElevenLabs Key (sk_...)'},{k:'gemini',p:'Gemini Key (AIza... / AQ....)'},{k:'sambanova',p:'SambaNova Key (sk_-)'},{k:'openrouter',p:'OpenRouter Key (sk-or-...)'},{k:'nvidia',p:'NVIDIA NIM Key (nvapi-...)'}].map(f=>(
           <input key={f.k} style={iStyle} type="password" placeholder={f.p} value={keys[f.k]} onChange={e=>setKeys(p=>({...p,[f.k]:e.target.value}))} />
         ))}
       </div>
-      <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center'}}>
-        <select style={{...iStyle,flex:1}} value={keys.elevenlabs_voice} onChange={e=>setKeys(p=>({...p,elevenlabs_voice:e.target.value}))}>
+      <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+        <select style={{...iStyle,flex:'1 1 200px'}} value={keys.elevenlabs_voice} onChange={e=>setKeys(p=>({...p,elevenlabs_voice:e.target.value}))}>
           {VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
         </select>
-        <button style={{padding:'10px 16px',background:'#2a2a2a',border:'1px solid rgba(255,255,255,0.35)',borderRadius:7,color:'#ffffff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',whiteSpace:'nowrap'}} onClick={testVoice} disabled={testing}>
+        <button style={{padding:'11px 18px',background:'#2a2a2a',border:'1px solid rgba(255,255,255,0.35)',borderRadius:8,color:'#ffffff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',whiteSpace:'nowrap',flexShrink:0}} onClick={testVoice} disabled={testing}>
           {testing ? 'ÇALINIYOR...' : '▶ SESİ TEST ET'}
         </button>
       </div>
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:12,color:'#e0e0e0',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ÜCRETSİZ SES (ElevenLabs key yoksa/başarısızsa bu kullanılır - kalite ElevenLabs'in gerisinde)</div>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ÜCRETSİZ SES (ElevenLabs key yoksa/başarısızsa bu kullanılır)</div>
         <select style={iStyle} value={keys.edge_voice} onChange={e=>setKeys(p=>({...p,edge_voice:e.target.value}))}>
           {EDGE_VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
         </select>
       </div>
-      {/* OTOMATİK SESLİ OKU (TASK 2) */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14}}>
+      {/* OTOMATİK SESLİ OKU */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14,flexWrap:'wrap',gap:10}}>
         <div style={{display:'flex',flexDirection:'column'}}>
-          <span style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>OTOMATİK SESLİ OKU (AUTO-SPEAK)</span>
-          <span style={{fontSize:12,color:'#d0d0d0',marginTop:3}}>Her ALES yanıtı tamamlandığında otomatik olarak seslendirilir</span>
+          <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>OTOMATİK SESLİ OKU (AUTO-SPEAK)</span>
+          <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>Her ALES yanıtı tamamlandığında otomatik olarak seslendirilir</span>
         </div>
         <button
           onClick={() => {
@@ -2523,7 +2511,7 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
             try { localStorage.setItem('ales_autospeak', String(next)); } catch {}
           }}
           style={{
-            padding: '6px 14px',
+            padding: '8px 16px',
             borderRadius: 6,
             border: `1px solid ${autoSpeak ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
             background: autoSpeak ? '#ffffff' : '#222222',

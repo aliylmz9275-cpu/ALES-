@@ -27,10 +27,8 @@ WORKDIR /app
 COPY railway/requirements_cloud.txt ./railway/requirements_cloud.txt
 RUN pip install --no-cache-dir -r railway/requirements_cloud.txt
 
-COPY backend/config_manager.py ./backend/config_manager.py
-COPY backend/multi_agent.py ./backend/multi_agent.py
-COPY backend/conversations.py ./backend/conversations.py
-COPY railway/main_cloud.py ./railway/main_cloud.py
+COPY backend/ ./backend/
+COPY railway/ ./railway/
 
 # Asama 1'de derlenen frontend (/build/dist) -> /app/dist
 # (main_cloud.py DIST_DIR = .../main_cloud.py'nin bulundugu klasorun

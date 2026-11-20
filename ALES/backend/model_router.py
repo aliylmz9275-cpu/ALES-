@@ -8,9 +8,9 @@ model degistirmek.
 
 Katmanlar (config_manager.DEFAULT_MODELS — TEK DOGRU KAYNAK orasidir;
 asagidaki liste yalnizca okuma kolayligi icin):
-  fast         Cerebras   llama-3.3-70b                     (<100ms hedef)
-  fallback     Groq       llama-3.3-70b-versatile           (fast duşerse)
-  vision       Gemini     gemini-2.0-flash                  (gorsel)
+  fast         Cerebras   gpt-oss-120b                      (<100ms hedef)
+  fallback     Groq       openai/gpt-oss-120b               (fast duşerse)
+  vision       Gemini     gemini-3.8-flash                  (gorsel)
   code         OpenRouter qwen/qwen3.8-27b                  (kod/plan)
   unrestricted NVIDIA     deepseek-ai/deepseek-v4-pro       (Cheat)
   heavy        OpenRouter moonshotai/kimi-k3                (Heavy)
