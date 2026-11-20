@@ -92,6 +92,58 @@ _stats = {"calls": 0, "windows_listed": 0, "focus": 0, "clicks": 0,
           "text_set": 0, "text_read": 0, "failures": 0,
           "backend_used": None, "last_error": None}
 
+# ─── DPI FARKINDALIĞI & KOORDİNAT ÖLÇEKLEME (TASK 1) ─────────────────
+_dpi_scale = None
+
+def get_dpi_scale() -> float:
+    """Windows DPI ölçekleme katsayısını döner (örn. %100 -> 1.0, %125 -> 1.25, %150 -> 1.5)."""
+    global _dpi_scale
+    if _dpi_scale is not None:
+        return _dpi_scale
+    try:
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2) # Per-monitor aware
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+        hdc = ctypes.windll.user32.GetDC(0)
+        LOGPIXELSX = 88
+        dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, LOGPIXELSX)
+        ctypes.windll.user32.ReleaseDC(0, hdc)
+        scale = round(dpi / 96.0, 2)
+        _dpi_scale = scale if scale > 0 else 1.0
+        print(f"[NATIVE_DESKTOP] DPI algılandı: {dpi} DPI (Ölçek: %{int(_dpi_scale*100)})")
+    except Exception as e:
+        print(f"[NATIVE_DESKTOP] DPI algılama hatası: {e}")
+        _dpi_scale = 1.0
+    return _dpi_scale
+
+def scale_coords(x: int, y: int) -> tuple:
+    """Ekran DPI ölçeklemesini hesaba katarak fiziksel piksel koordinatlarına dönüştürür."""
+    scale = get_dpi_scale()
+    return int(round(x * scale)), int(round(y * scale))
+
+def click_at_scaled(x: int, y: int) -> str:
+    """DPI farkındalığıyla koordinata tıklar."""
+    try:
+        scale = get_dpi_scale()
+        sx, sy = scale_coords(x, y)
+        if _pag is not None:
+            _pag.click(sx, sy)
+            return f"✅ ({x}, {y}) tıklandı (DPI ölçek: %{int(scale*100)}, hedef: {sx}, {sy})"
+        else:
+            user32 = ctypes.windll.user32
+            user32.SetCursorPos(sx, sy)
+            MOUSEEVENTF_LEFTDOWN = 0x0002
+            MOUSEEVENTF_LEFTUP = 0x0004
+            user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            return f"✅ ({x}, {y}) ctypes ile tıklandı (DPI ölçek: %{int(scale*100)})"
+    except Exception as e:
+        return f"❌ Tıklama hatası: {e}"
+
 
 def _bump(key: str, n: int = 1):
     with _lock:
@@ -575,11 +627,14 @@ def click_control(title: str, name: str, control_type: str = None,
                 pass
             ctrl = _uia_find(w, name, control_type)
             if ctrl is None:
-                return (f"[HATA] '{title}' icinde '{name}' elementi yok. "
-                        f"list_controls('{title}') ile mevcut elementlere bak.")
+                err_msg = f"[HATA] uiautomation: '{title}' içinde '{name}' elementi bulunamadı. list_controls ile mevcut elementleri kontrol edin."
+                print(f"[NATIVE_DESKTOP] {err_msg}")
+                return err_msg
             try:
                 if not ctrl.IsEnabled:
-                    return f"[HATA] '{name}' devre disi; tiklanmadi."
+                    err_msg = f"[HATA] uiautomation: '{name}' elementi devre dışı (disabled); tıklanamaz."
+                    print(f"[NATIVE_DESKTOP] {err_msg}")
+                    return err_msg
             except Exception:
                 pass
             ctrl.DoubleClick() if double else ctrl.Click()
@@ -591,6 +646,7 @@ def click_control(title: str, name: str, control_type: str = None,
         _bump("clicks")
         return f"[OK] '{name}' {'cift ' if double else ''}tiklandi ({title})."
     except Exception as e:
+        print(f"[NATIVE_DESKTOP] click_control istisnası ({title} / {name}): {e}")
         return _fail("click_control", e)
 
 

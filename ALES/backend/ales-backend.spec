@@ -96,7 +96,7 @@ hiddenimports += [
     "concurrent.futures", "groq", "edge_tts", "pyautogui", "psutil",
     "httpx", "PIL", "selenium", "playwright", "pyperclip", "pytesseract",
     "mss", "websockets", "dotenv", "sqlite3", "encodings.idna",
-    "pyscreeze", "pymsgbox", "pytweening", "comtypes", "uiautomation",
+    "pyscreeze", "pymsgbox", "pytweening", "comtypes", "uiautomation", "pywinauto",
 ]
 
 def _have(pkg: str) -> bool:
@@ -136,7 +136,7 @@ for _p in OPTIONAL:
 # olmadigi icin butun derlemeyi durduruyordu.
 for _p in ("edge_tts", "groq", "google.genai", "google.generativeai", "cerebras", "keyring",
            "RealtimeTTS", "sqlite_vec", "pyautogui", "pyscreeze", "pymsgbox",
-           "pytweening", "mss", "uiautomation", "comtypes"):
+           "pytweening", "mss", "uiautomation", "comtypes", "pywinauto"):
     if not _have(_p.split(".")[0]):
         continue
     try:

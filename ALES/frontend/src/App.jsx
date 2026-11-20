@@ -445,7 +445,6 @@ const TL = {
   google_search:'Arıyor',get_worldview:'Dunyaya bakiyor',
   get_news_tr:'Haberler alıyor',get_weather:'Hava durumu',
   get_crypto_prices:'Kripto fiyatları',get_exchange_rates:'Doviz',
-  check_fiverr_messages:'Fiverr kontrol',check_bionluk_messages:'Bionluk kontrol',
   run_python_code:'Kod calıstırıyor',set_persona:'Mod degistiriyor',
   switch_model:'Model degistiriyor',add_schedule:'Zamanlama kuruyor',
   // Masaustu kontrolu (native_desktop.py)
@@ -768,7 +767,7 @@ export default function App() {
   const startListening = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) {
-      alert("Sisteminizde veya tarayıcınızda Web Speech API (ses tanıma) bulunamadı.")
+      alert("Mikrofon desteklenmiyor veya internet yok. Lütfen yazılı komut kullanın.")
       return
     }
     try {
@@ -787,16 +786,18 @@ export default function App() {
         }
       }
       rec.onerror = (err) => {
-        console.warn("STT hatasi:", err)
+        console.warn("STT hatası:", err)
         setListening(false)
+        alert("Mikrofon desteklenmiyor veya internet yok. Lütfen yazılı komut kullanın.")
       }
       rec.onend = () => setListening(false)
       recRef.current = rec
       rec.start()
       setListening(true)
     } catch (err) {
-      console.warn("STT baslatma hatasi:", err)
+      console.warn("STT başlatma hatası:", err)
       setListening(false)
+      alert("Mikrofon desteklenmiyor veya internet yok. Lütfen yazılı komut kullanın.")
     }
   }
 
@@ -1463,7 +1464,7 @@ export default function App() {
                   {l:'Döviz',a:'Guncel doviz kurlarini getir'},
                   {l:'Kripto',a:'Bitcoin fiyatlarini getir'},
                   {l:'Hava',a:'Istanbul hava durumunu getir'},
-                  {l:'Fiverr',a:'Fiverr gorevlerimi listele'},
+                  {l:'Pencereler',a:'Açık pencereleri listele'},
                   {l:'Sistem',a:'Sistem bilgilerini goster'},
                 ].map(item=>(
                   <button key={item.l} style={{padding:'16px 12px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.15)',borderRadius:8,color:'#E4E4E7',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',transition:'all .15s'}} onClick={()=>sendMessage(item.a)}>{item.l}</button>
@@ -1760,10 +1761,10 @@ export default function App() {
             <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1.5,marginBottom:10}}>HIZLI KOMUTLAR</div>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {[
-                {l:'Fiverr Mesajlarını Kontrol Et',a:'Fiverr mesajlarimi kontrol et'},
-                {l:'Bionluk Mesajlarını Kontrol Et',a:'Bionluk mesajlarimi kontrol et'},
-                {l:'Aktif Görevleri Listele',a:'Fiverr gorevlerimi listele'},
-                {l:'Zamanlama Kur',a:'Her sabah 9da Fiverr mesajlarimi kontrol et'},
+                {l:'Masaüstü Not Defteri Aç ve Test Et',a:'Not defterini aç ve Merhaba ALES yaz'},
+                {l:'Açık Pencereleri Listele',a:'Açık pencereleri listele'},
+                {l:'Ekran Görüntüsü Al',a:'Ekran görüntüsü al'},
+                {l:'Sistem Kaynak Durumunu Göster',a:'Sistem bilgilerini göster'},
               ].map(item=>(
                 <button key={item.l} style={{padding:'12px 16px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,color:'#E4E4E7',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',textAlign:'left',transition:'all .15s'}} onClick={()=>sendMessage(item.a)}>{item.l}</button>
               ))}
@@ -1897,7 +1898,7 @@ export default function App() {
               </div>
 
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1.5,marginBottom:10}}>KAZANÇ (Fiverr / Bionluk)</div>
+                <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1.5,marginBottom:10}}>KAZANÇ (Proje & Görevler)</div>
                 {(() => {
                   const e = stats.earnings || {total:0,today:0,month:0,currency:'TRY'}
                   const sym = e.currency==='TRY' ? '₺' : (e.currency||'')
@@ -2330,68 +2331,80 @@ function ModeSelector() {
 
 function StatusPanel() {
   const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
 
   const loadStatus = useCallback(async () => {
+    setLoading(true)
+    setErr('')
     try {
-      const res = await authFetch(API_URL + '/api/ales/audit-status')
+      const res = await authFetch(API_URL + '/api/system/status')
       const json = await res.json()
-      if (json.ok && json.capabilities) setData(json.capabilities)
-    } catch (e) {}
+      if (json.ok && json.capabilities) {
+        setData(json.capabilities)
+      } else {
+        setErr(json.error || 'Durum bilgisi okunamadı')
+      }
+    } catch (e) {
+      setErr('Backend sunucusuna ulaşılamadı')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { loadStatus() }, [loadStatus])
-
-  const defaultCaps = {
-    computer_control: { status: 'working', label: 'Masaüstü Denetimi', details: 'Pencere listeleme, odaklama, koordinat/element tıklama, ekran yakalama' },
-    fast_path: { status: 'working', label: 'Fast Path (Zero-LLM)', details: 'Rutin komutlarda LLM\'siz anında araç yürütme (<50ms)' },
-    memory: { status: 'working', label: 'Kalıcı Hafıza', details: 'SQLite + Ebbinghaus unutma ve pekiştirme eğrisi' },
-    voice_tts: { status: 'working', label: 'Ses Çıkışı (TTS)', details: 'Edge-TTS Türkçe (tr-TR-AhmetNeural / EmelNeural)' },
-    voice_stt: { status: 'beta', label: 'Ses Girişi (STT)', details: 'Bas-Konuş / Web Speech API (Tarayıcı ve Electron yerel motoru)' },
-    security_shield: { status: 'working', label: 'Güvenlik Kalkanı', details: 'Komut kaynağı takibi, enjeksiyon taraması, tehlikeli işlem onayı' },
-    freelance: { status: 'working', label: 'Serbest Çalışan (Freelance) Asistanı', details: 'Fiverr/Bionluk mesaj okuma, özetleme, taslak yanıt (Otomatik gönderim YOK)' },
-    file_organizer: { status: 'working', label: 'Dosya Düzenleyici', details: 'Kategori ve tarihe göre organize etme, önizleme garantili' },
-    report_generator: { status: 'working', label: 'Rapor Oluşturucu', details: 'CSV/Excel otomatik istatistiksel analiz ve HTML raporu' },
-    email_assistant: { status: 'working', label: 'E-Posta Asistanı', details: 'IMAP gelen kutusu okuma ve taslak hazırlama (Otomatik gönderim YOK)' },
-    evolution: { status: 'experimental', label: 'Evrim (Deneysel)', details: 'İstem düzeyi iyileştirme. Kendi kodunu değiştirme ve çoğalma kalıcı olarak kapsam dışıdır.' }
-  }
-
-  const caps = data || defaultCaps
 
   const badgeStyle = (st) => {
     switch (st) {
       case 'working': return { bg: 'rgba(34, 197, 94, 0.15)', border: '#22c55e', text: '#4ade80', label: 'ÇALIŞIYOR' }
       case 'beta': return { bg: 'rgba(234, 179, 8, 0.15)', border: '#eab308', text: '#fde047', label: 'BETA' }
       case 'experimental': return { bg: 'rgba(168, 85, 247, 0.15)', border: '#a855f7', text: '#c084fc', label: 'DENEYSEL' }
-      default: return { bg: 'rgba(239, 68, 68, 0.15)', border: '#ef4444', text: '#f87171', label: 'UYGULANMADI' }
+      default: return { bg: 'rgba(239, 68, 68, 0.15)', border: '#ef4444', text: '#f87171', label: 'KAPALI / YOK' }
     }
   }
 
   return (
-    <div style={{height:'100%',overflowY:'auto',padding:'16px 18px',fontFamily:'monospace'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+    <div style={{height:'100%',overflowY:'auto',padding:'16px 20px',background:'#121212',color:'#E4E4E7',fontFamily:'monospace'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:10}}>
         <div>
-          <div style={{fontSize:13,color:'#ffffff',letterSpacing:2,fontWeight:700}}>ALES SİSTEM DURUMU & DÜRÜST KAPSAM</div>
-          <div style={{fontSize:12,color:'#cccccc',marginTop:4}}>Neyin çalışıp neyin çalışmadığına dair şeffaf durum tablosu</div>
+          <div style={{fontSize:15,color:'#ffffff',letterSpacing:2,fontWeight:700}}>ALES GERÇEK SİSTEM VE MODÜL DURUMU</div>
+          <div style={{fontSize:13,color:'#A1A1AA',marginTop:4}}>Tüm bileşenler, API anahtarları ve masaüstü motoru anlık olarak test edilir.</div>
         </div>
-        <button onClick={loadStatus} style={{padding:'6px 14px',background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,color:'#ffffff',cursor:'pointer',fontSize:12,fontWeight:600}}>YENİLE</button>
+        <button onClick={loadStatus} disabled={loading} style={{padding:'8px 16px',background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,color:'#ffffff',cursor:loading?'not-allowed':'pointer',fontSize:13,fontWeight:600}}>
+          {loading ? 'TARANIYOR...' : '↻ YENİLE'}
+        </button>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:12}}>
-        {Object.entries(caps).map(([key, item]) => {
-          const b = badgeStyle(item.status)
-          return (
-            <div key={key} style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:8,padding:14,display:'flex',flexDirection:'column',justifyContent:'space-between',gap:10}}>
-              <div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-                  <div style={{fontSize:13,color:'#ffffff',fontWeight:700}}>{item.label}</div>
-                  <span style={{fontSize:10,padding:'3px 8px',borderRadius:4,background:b.bg,border:`1px solid ${b.border}`,color:b.text,fontWeight:700,letterSpacing:0.5}}>{b.label}</span>
+      {loading && !data && (
+        <div style={{textAlign:'center',padding:40,color:'#A1A1AA',fontSize:14}}>
+          Sistem bileşenleri canlı olarak denetleniyor...
+        </div>
+      )}
+
+      {err && (
+        <div style={{padding:'12px 16px',background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.35)',borderRadius:8,color:'#f87171',fontSize:13,marginBottom:16}}>
+          {err}
+        </div>
+      )}
+
+      {data && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:12}}>
+          {Object.entries(data).map(([key, item]) => {
+            const b = badgeStyle(item.status)
+            return (
+              <div key={key} style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.14)',borderRadius:8,padding:16,display:'flex',flexDirection:'column',justifyContent:'space-between',gap:12}}>
+                <div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                    <div style={{fontSize:14,color:'#ffffff',fontWeight:700}}>{item.label}</div>
+                    <span style={{fontSize:11,padding:'4px 8px',borderRadius:4,background:b.bg,border:`1px solid ${b.border}`,color:b.text,fontWeight:700,letterSpacing:0.5}}>{b.label}</span>
+                  </div>
+                  <div style={{fontSize:13,color:'#E4E4E7',lineHeight:1.5}}>{item.details}</div>
                 </div>
-                <div style={{fontSize:12,color:'#cccccc',lineHeight:1.5}}>{item.details}</div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

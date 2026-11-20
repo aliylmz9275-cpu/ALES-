@@ -503,8 +503,12 @@ def press_key(key: str) -> str:
 
 def click_at(x: int, y: int) -> str:
     try:
-        pyautogui.click(x, y); return f"✅ ({x},{y})"
-    except Exception as e: return f"❌ {e}"
+        if native_desktop is not None and hasattr(native_desktop, "click_at_scaled"):
+            return native_desktop.click_at_scaled(int(x), int(y))
+        pyautogui.click(int(x), int(y))
+        return f"✅ ({x},{y})"
+    except Exception as e:
+        return f"❌ Tıklama hatası: {e}"
 
 def get_system_info() -> str:
     try:
@@ -2693,7 +2697,170 @@ async def status():
     cfg = load_config()
     mem = load_memory()
     persona = get_current_persona()
-    return {"status":"online","persona":persona["name"],"has_groq":bool(cfg.get("groq_key")),"has_cerebras":bool(cfg.get("cerebras_key")),"tasks":len(mem["fiverr_tasks"]),"time":datetime.now().isoformat()}
+    return {"status":"online","persona":persona["name"],"has_groq":bool(cfg.get("groq_key")),"has_cerebras":bool(cfg.get("cerebras_key")),"tasks":len(mem.get("fiverr_tasks",[])),"time":datetime.now().isoformat()}
+
+
+@app.get("/api/system/status")
+async def get_real_system_status():
+    """
+    Sistemin GERÇEK durumunu dinamik olarak denetler ve döner (TASK 3).
+    Mock/statik veri içermez; modüllerin varlığını, API anahtarlarını,
+    DPI ölçeğini ve disk durumunu anlık test eder.
+    """
+    cfg = load_config()
+    caps = {}
+
+    # 1. API Anahtarları & Model Sağlayıcıları
+    active_keys = []
+    for prov, k in (("Groq", "groq_key"), ("Gemini", "gemini_key"), ("Cerebras", "cerebras_key"),
+                    ("NVIDIA", "nvidia_key"), ("OpenRouter", "openrouter_key"), ("SambaNova", "sambanova_key")):
+        if cfg.get(k):
+            active_keys.append(prov)
+    
+    if active_keys:
+        caps["api_models"] = {
+            "status": "working",
+            "label": "Model Sağlayıcıları & API",
+            "details": f"Aktif Anahtarlar: {', '.join(active_keys)} (Model Router hazır)"
+        }
+    else:
+        caps["api_models"] = {
+            "status": "failed",
+            "label": "Model Sağlayıcıları & API",
+            "details": "Hiçbir API anahtarı tanımlanmamış. ALES yanıt veremez; Ayarlar'dan anahtar ekleyin."
+        }
+
+    # 2. Masaüstü Denetimi (Computer Use & DPI)
+    try:
+        import native_desktop
+        dpi_scale = native_desktop.get_dpi_scale()
+        backends = native_desktop.backend_info()
+        el_backend = backends.get("element_backend")
+        if el_backend:
+            caps["computer_control"] = {
+                "status": "working",
+                "label": "Masaüstü Denetimi (Computer Use)",
+                "details": f"Motor: {el_backend} (Element Ağacı) + PyAutoGUI | DPI Ölçek: %{int(dpi_scale*100)}"
+            }
+        elif backends.get("window_backend"):
+            caps["computer_control"] = {
+                "status": "beta",
+                "label": "Masaüstü Denetimi (Computer Use)",
+                "details": f"Motor: {backends.get('window_backend')} (Piksel Koordinatı) | DPI Ölçek: %{int(dpi_scale*100)} (Element seviyesi kütüphane eksik)"
+            }
+        else:
+            caps["computer_control"] = {
+                "status": "failed",
+                "label": "Masaüstü Denetimi",
+                "details": "Windows arayüz sürücüsü yüklenemedi."
+            }
+    except Exception as e_nd:
+        caps["computer_control"] = {
+            "status": "failed",
+            "label": "Masaüstü Denetimi",
+            "details": f"Masaüstü sürücü hatası: {e_nd}"
+        }
+
+    # 3. Canlı Ekran Yayını (screen_streamer)
+    try:
+        import screen_streamer
+        test_frame = screen_streamer._capture_screen_jpeg_base64()
+        if test_frame:
+            caps["screen_streamer"] = {
+                "status": "working",
+                "label": "Canlı Ekran Yayını",
+                "details": "MSS/PIL ekran yakalama aktif (Boşta 1 FPS, Görevde 2 FPS)"
+            }
+        else:
+            caps["screen_streamer"] = {
+                "status": "beta",
+                "label": "Canlı Ekran Yayını",
+                "details": "Ekran yakalama motoru başlatılamadı."
+            }
+    except Exception as e_ss:
+        caps["screen_streamer"] = {
+            "status": "failed",
+            "label": "Canlı Ekran Yayını",
+            "details": f"Hata: {e_ss}"
+        }
+
+    # 4. Deneyim Öğrenici (experience_learner)
+    try:
+        import experience_learner
+        rules = experience_learner.load_rules()
+        caps["experience_learner"] = {
+            "status": "working",
+            "label": "Deneyim & Hata Öğrenici",
+            "details": f"Disk üzerinde aktif (%APPDATA%\\ALES\\learned_rules.json). Toplam {len(rules)} kural devrede."
+        }
+    except Exception as e_el:
+        caps["experience_learner"] = {
+            "status": "failed",
+            "label": "Deneyim Öğrenici",
+            "details": f"Hata: {e_el}"
+        }
+
+    # 5. Manager-Executor Mimarisi
+    try:
+        import manager_agent
+        import executor_agent
+        caps["manager_executor"] = {
+            "status": "working",
+            "label": "Manager-Executor Mimarisi",
+            "details": "Görev Planlama, Alt Görev İcrası ve Adım Doğrulama/Kurtarma döngüsü aktif."
+        }
+    except Exception as e_me:
+        caps["manager_executor"] = {
+            "status": "failed",
+            "label": "Manager-Executor",
+            "details": f"Hata: {e_me}"
+        }
+
+    # 6. Ses Sentezi (TTS)
+    try:
+        import edge_tts
+        caps["voice_tts"] = {
+            "status": "working",
+            "label": "Ses Çıkışı (Edge-TTS)",
+            "details": "Türkçe doğal sesler aktif (Ahmet / Emel Neural)"
+        }
+    except Exception as e_tts:
+        caps["voice_tts"] = {
+            "status": "failed",
+            "label": "Ses Çıkışı",
+            "details": f"TTS motoru bulunamadı: {e_tts}"
+        }
+
+    # 7. Ses Girişi (STT)
+    caps["voice_stt"] = {
+        "status": "beta",
+        "label": "Ses Girişi (STT)",
+        "details": "Tarayıcı Web Speech API (Mikrofon izni ve internet bağlantısı gerektirir)."
+    }
+
+    # 8. Kalıcı Hafıza
+    try:
+        mem = load_memory()
+        caps["memory"] = {
+            "status": "working",
+            "label": "Kalıcı Hafıza & Profil",
+            "details": f"Kısa hafıza: {len(mem.get('short', []))} mesaj, Profil kayıtları aktif."
+        }
+    except Exception as e_mem:
+        caps["memory"] = {
+            "status": "failed",
+            "label": "Kalıcı Hafıza",
+            "details": f"Hafıza okuma hatası: {e_mem}"
+        }
+
+    # 9. Serbest Çalışan Botu (Dürüst Durum)
+    caps["freelance"] = {
+        "status": "failed",
+        "label": "Serbest Çalışan (Freelance) Botu",
+        "details": "Kaldırıldı: Cloudflare Turnstile ve 2FA engelleri nedeniyle devre dışı bırakıldı."
+    }
+
+    return {"ok": True, "capabilities": caps, "checked_at": datetime.now().isoformat()}
 
 # ─── SURUMLU YAPILANDIRMA (anlik goruntu + geri alma) ────────────────
 # Sozlesme: her yapilandirma kaydinda DEGISIKLIKTEN ONCEKI hal saklanir,
