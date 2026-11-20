@@ -1,0 +1,14 @@
+{
+  "groq_key": "test1234",
+  "cerebras_key": "",
+  "elevenlabs_key": "",
+  "elevenlabs_voice": "VR6AewLTigWG4xSOukaG",
+  "gemini_key": "AQ.Ab8RN6K3i7rDXFgbTpxQfu_PpQF0125C8tSXmps7fPqNmw-6JA",
+  "sambanova_key": "",
+  "openrouter_key": "",
+  "edge_voice": "tr-TR-EmelNeural",
+  "nvidia_key": "",
+  "mode": "auto",
+  "performance_mode": false,
+  "headless_mode": false
+}

@@ -1,0 +1,171 @@
+/* ═══════════════════════════════════════════════════════════════════
+   ALES — index.css
+   Metin/kenar keskinligi ve DPI olcekleme kurallari.
+
+   NOT: Bu dosya YENI. Daha once projede hic .css dosyasi yoktu --
+   App.jsx tum stilini satir ici (inline) nesnelerle veriyor. Bu yuzden
+   "tum px degerlerini rem'e cevir" isteminin gerektirdigi yer burasi
+   DEGIL; asagidaki :root/body ikilisi o donusumu MUMKUN kilar, ama
+   App.jsx'teki ~2000 satir ici olcuyu tek tek cevirmek ayri bir istir
+   (bkz. "62.5% TUZAGI" notu).
+
+   TEMA: Bu dosya HIC renk tanimlamaz. Siyah/gri estetige dokunulmadi.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── KOK OLCU: 1rem = 10px ──────────────────────────────────────────
+   62.5% x 16px (tarayici varsayilani) = 10px, yani 1rem = 10px.
+
+   KRITIK — 62.5% TUZAGI: html font-size'i 10px'e dusurmek, kendisine
+   ayrica fontSize verilMEYEN her ogenin 16px'ten 10px'e dusmesi demektir.
+   App.jsx'te metin boyutlari satir ici px olarak verildigi icin onlar
+   etkilenmez, AMA fontSize'i hic belirtilmemis ogeler aniden %37 kucuk
+   cikardi -- arayuzun yari yarisi bozulurdu.
+   Bunu onlemek icin body'ye 1.6rem (= tam 16px) veriyoruz: devralinan
+   taban boyut BUGUNKUYLE BIREBIR AYNI kalir, ama artik rem yazabiliriz.
+   Bu iki kural BIRLIKTE degistirilmeli; birini silmek arayuzu bozar. */
+:root {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  background-color: #000000;
+  color: #f0f0f0;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── GORSELLER ──────────────────────────────────────────────────────
+   image-rendering: auto = tarayicinin kaliteli (bilinear/mipmap)
+   olcekleyicisi. "pixelated" BILINCLI OLARAK kullanilmiyor: kesirli DPI
+   (1.25x / 1.5x) altinda pixelated, kenarlari basamak basamak gosterir --
+   sikayet edilen "pikselli" gorunumun ta kendisi.
+   ALES'te su an sadece icon-192/512.png var (manifest + favicon), ama
+   kural ileride eklenecek her gorsel icin de gecerli olsun diye genel. */
+img,
+canvas,
+video,
+picture,
+svg image {
+  image-rendering: auto;
+  -ms-interpolation-mode: bicubic;
+}
+
+/* ─── SVG ────────────────────────────────────────────────────────────
+   DURUM TESPITI: projede .svg dosyasi YOK; satir ici tek bir <svg> var
+   (App.jsx, kazanc grafigi). O grafik BILINCLI OLARAK
+   preserveAspectRatio="none" kullaniyor: sparkline'in kapsayici
+   genisligini tam doldurmasi gerekiyor. "xMidYMid meet"e cevirmek onu
+   kutu icinde kucultup iki yana bosluk birakirdi -- duzeltme degil,
+   gerileme olurdu. Oradaki asil keskinlik onlemi zaten mevcut:
+   polyline'da vectorEffect="non-scaling-stroke", yani cizgi kalinligi
+   yatay/dusey esnemeden etkilenmiyor.
+
+   NOT: preserveAspectRatio bir CSS OZELLIGI DEGIL, SVG NITELIGIDIR --
+   stil dosyasina yazilsa tarayici tarafindan sessizce atilir. Bu yuzden
+   burada yok; yeni eklenecek ikonlarda niteligi ETIKETTE verin
+   (varsayilani zaten "xMidYMid meet"tir, "none" yazmadikca sorun olmaz).
+
+   Asagidakiler gercekten ise yarayan, kalitimla cocuklara gecen kurallar. */
+svg {
+  max-width: 100%;
+  /* geometricPrecision: kenar yumusatmayi acik tutar. "crispEdges"
+     yumusatmayi KAPATIR ve tam da sikayet edilen basamakli/pikselli
+     gorunumu uretir -- o yuzden kullanilmiyor. */
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+}
+
+/* Yazi akisi icindeki ikonlar: olcuyu yaziya bagla (sabit px yerine),
+   satira oturt, flex kapsayicida ezilip orani bozulmasin. */
+svg.icon,
+button > svg,
+label > svg {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  flex: none;
+}
+
+/* ─── METIN KATMANLARI ───────────────────────────────────────────────
+   ASIL KESKINLIK KURALI BU. Chromium, bir ogeyi kendi bilesik
+   (composited) katmanina tasidiginda o katmandaki metni LCD alt-piksel
+   yumusatmasindan CIKARIR ve gri tonlamaya duser. Windows'ta bu, "hafif
+   pikselli / bulanik yazi" olarak gorunur -- sikayetin birincil sebebi.
+   Katmana tasiyan seyler: backdrop-filter, filter, will-change,
+   opak olmayan arka planla birlesen 3D donusumler.
+
+   O yuzden App.jsx'te backdrop-filter'lar kaldirildi (oradaki notlara
+   bakin). Burada da genel bir guvenlik agi kuruyoruz: metin tasiyan
+   ogelerde will-change'i kimse kazara acmasin.
+   backdrop-filter'i BURADAN yasaklamiyoruz -- gerektiginde gorsel ustu
+   panellerde mesru; kural, ALTINDA METIN OLAN yerlerde kullanmamak. */
+button,
+input,
+textarea,
+select,
+pre,
+code,
+label {
+  will-change: auto;
+}
+
+/* ─── KESIRLI DPI (Windows %125 / %150) ──────────────────────────────
+   NEDEN "boyut nudge"i YOK: Windows %125'te zaten her seyi 1.25 kat
+   buyutuyor ve Chromium bunu devicePixelRatio olarak uyguluyor. Burada
+   font/padding'i bir kez daha buyutmek olcegi CIFT uygular -- arayuz
+   hem sisip tasar hem de kesirli boyutlar yuzunden daha bulanik gorunur.
+   Yani "%125'te yazilari buyut" gibi bir kural sorunu cozmez, buyutur.
+
+   Bunun yerine burada gercekten cozulebilen tek sey var: kesirli
+   cihaz-piksel oraninda tam sayiya oturmayan INCE cizgiler.
+   1px kenarlar Chromium tarafindan cihaz pikseline yuvarlanir
+   (pixel snapping), bu yuzden onlara dokunmuyoruz -- 0.8px gibi
+   degerler yuvarlanmayi bozup cizgiyi SOLUKLASTIRIR.
+   Kaydirma cubugu ise 3px ile 1.25x'te 3.75 cihaz pikseline denk
+   geliyordu; tam sayiya oturan degerlere sabitliyoruz.
+
+   --hairline: App.jsx satir ici kenarlari CSS'ten ezilemez (inline stil
+   kazanir). Ilerideki kullanim icin tek dogru kaynak burada dursun. */
+:root {
+  --hairline: 1px;
+}
+
+@media (min-resolution: 1.25dppx) and (max-resolution: 1.49dppx) {
+  ::-webkit-scrollbar {
+    width: 2.4px; /* x1.25 = tam 3 cihaz pikseli */
+  }
+}
+
+@media (min-resolution: 1.5dppx) {
+  ::-webkit-scrollbar {
+    width: 2px; /* x1.5 = tam 3 cihaz pikseli */
+  }
+}
+
+/* ─── ERISILEBILIRLIK ────────────────────────────────────────────────
+   Hareket azaltma isteyen kullanicida gecisleri kapat. App.jsx bunu
+   useReducedMotion() ile JS tarafinda da yapiyor; bu kural, o kancanin
+   ulasmadigi CSS animasyonlari (@keyframes ile verilenler) icin. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,28 @@
+# Render.com icin deploy yapilandirmasi (Railway'e alternatif).
+# Render web dashboard'da "New +" > "Blueprint" ile bu repoyu baglarsan
+# bu dosyayi otomatik okur. envVars altindaki "sync: false" olanlari
+# Render paneline SEN elle girmen gerekiyor (guvenlik geregi, bu dosyada
+# gizli anahtar tutulmaz).
+services:
+  - type: web
+    name: ales-cloud
+    runtime: docker
+    dockerfilePath: ./Dockerfile.cloud
+    dockerContext: .
+    plan: free
+    healthCheckPath: /status
+    envVars:
+      - key: ALES_ACCESS_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SAMBANOVA_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false

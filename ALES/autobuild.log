@@ -1,0 +1,704 @@
+====================================================================
+ALES AUTOBUILD
+root : C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES
+start: 2026-10-06 22:21:08
+====================================================================
+
+[STEP 0] arac surumleri -- ATLANDI (--from=1)
+
+[STEP 0] PyInstaller hazir -- ATLANDI (--from=1)
+
+====================================================================
+[STEP 1] py_compile (sozdizimi)
+  cmd: python -m py_compile backend/main.py backend/agent_jit.py backend/predictive.py backend/speculative_cache.py backend/test_new_modules.py backend/model_registry.py backend/model_router.py backend/repair_model_chain.py backend/config_manager.py backend/puter_connector.py backend/security_shield.py backend/freelance_bridge.py backend/file_organizer.py backend/report_generator.py backend/email_assistant.py backend/gigcep_bridge.py smoke_test_exe.py AUTOBUILD.py
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES
+====================================================================
+[STEP 1] RESULT=OK exit=0 sure=0.6s
+
+====================================================================
+[STEP 1] node --check (JS sozdizimi)
+  cmd: node --check electron-main.js && node --check preload.js && node --check frontend/public/sw.js
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES
+====================================================================
+[STEP 1] RESULT=OK exit=0 sure=0.2s
+
+====================================================================
+[STEP 2] test_new_modules.py
+  cmd: python test_new_modules.py
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend
+====================================================================
+C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\long_term_memory.py:105: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+deneme 1/3 basarisiz (TimeoutError); 0.0s sonra yeniden
+deneme 2/3 basarisiz (TimeoutError); 0.0s sonra yeniden
+deneme 1/3 basarisiz (ConnectionError); 0.0s sonra yeniden
+
+==============================================================
+0) IMPORT + SOZDIZIMI (hepsi derleniyor mu?)
+==============================================================
+[config] .env yuklendi: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\.env (4 degisken)
+[CONFIG] AppData klasoru: C:\Users\Ali Yılmaz\AppData\Roaming\ALES
+  [OK]   import long_term_memory
+  [OK]   import resource_monitor
+  [OK]   import runtime_state
+  [OK]   import batch_queue
+  [OK]   import credentials
+  [OK]   import retry_util
+  [OK]   import browser_profiles
+
+==============================================================
+1) long_term_memory — ekle / hatirla / pekistir / unut
+==============================================================
+[LTM] Gemini embedding kullanilamadi -> bu oturum boyunca yerel 256-boyutlu embedder kullanilacak.
+  [OK]   ekleme  — id=1
+  [OK]   ek kayitlar  — 2 kayit daha
+  [OK]   tekrar->pekistirme  — tekrar kayit -> pekistirme
+  [OK]   anlamsal hatirlama  — en iyi='Ali Fiverr icin logo tasarimi yapi...' skor=0.4714
+  [OK]   bos sorgu  — bos sorgu guvenli
+  [OK]   istatistik  — total=3 embedding=local vec_ext=False
+  [OK]   unutma (taze korunur)  — taze kayitlar korundu
+  (gecici db silindi: ales_ltm_test_1791314469.db)
+
+==============================================================
+2) resource_monitor — olcum + esik degerlendirme
+==============================================================
+  [OK]   anlik olcum  — ALES: CPU 0.0% RAM 0.6% (99.2MB, 1 surec) | Sistem: CPU 9.0% RAM 64.8%
+  [OK]   GPU okuma  — GPU 0.0% (0.0/4096.0MB) backend=smi
+  [OK]   esik: asim+kritik  — yuksek degerler -> 2 asim + kritik
+  [OK]   esik: sakin  — dusuk degerler -> asim yok
+  [OK]   GPU yoksa atla  — GPU olculemedi -> esik atlandi
+  [OK]   tick  — tick calisti, degerler={'cpu': 0.0, 'ram': 0.6, 'gpu': 0.0}
+  [OK]   status  — scope=self esikler={'cpu': 20.0, 'ram': 30.0, 'gpu': 10.0} guard=True
+
+==============================================================
+3) runtime_state — modul duraklatma / modlar / uyku
+==============================================================
+  [OK]   snapshot  — 30 modul kayitli
+  [OK]   ertelenmis moduller  — computer-use modulleri available=False (karar korundu)
+[RUNTIME] Duraklatildi: tts (test)
+[RUNTIME] Devam: tts
+  [OK]   pause/resume  — pause/resume calisiyor
+  [OK]   gecersiz modul  — bilinmeyen modul reddedildi
+[RUNTIME] Duraklatildi: opendex_ui (sleep)
+[RUNTIME] Duraklatildi: shadowbroker (sleep)
+[RUNTIME] Duraklatildi: realtime_tts (sleep)
+[RUNTIME] Duraklatildi: open_infra_agent (sleep)
+[RUNTIME] Duraklatildi: nanobrowser (sleep)
+[RUNTIME] Duraklatildi: gui_thinker (sleep)
+[RUNTIME] Duraklatildi: agent_s3 (sleep)
+[RUNTIME] Duraklatildi: aguvis (sleep)
+[RUNTIME] Duraklatildi: predictive (sleep)
+[RUNTIME] Duraklatildi: spec_cache (sleep)
+[RUNTIME] Duraklatildi: batch_inference (sleep)
+[RUNTIME] Duraklatildi: moa (sleep)
+[RUNTIME] Duraklatildi: reflection (sleep)
+[RUNTIME] Duraklatildi: darwin_godel (sleep)
+[RUNTIME] Duraklatildi: openclaw (sleep)
+[RUNTIME] Duraklatildi: evo_cua (sleep)
+[RUNTIME] Duraklatildi: websocket (sleep)
+[RUNTIME] Uyku modu (test).
+[RUNTIME] Devam: websocket
+[RUNTIME] Devam: opendex_ui
+[RUNTIME] Devam: shadowbroker
+[RUNTIME] Devam: realtime_tts
+[RUNTIME] Devam: open_infra_agent
+[RUNTIME] Devam: nanobrowser
+[RUNTIME] Devam: gui_thinker
+[RUNTIME] Devam: agent_s3
+[RUNTIME] Devam: aguvis
+[RUNTIME] Devam: predictive
+[RUNTIME] Devam: spec_cache
+[RUNTIME] Devam: batch_inference
+[RUNTIME] Devam: moa
+[RUNTIME] Devam: reflection
+[RUNTIME] Devam: darwin_godel
+[RUNTIME] Devam: openclaw
+[RUNTIME] Devam: evo_cua
+[RUNTIME] Uyandi (test).
+  [OK]   uyku modu  — uyku/uyanma calisiyor
+[RUNTIME] Duraklatildi: opendex_ui (headless)
+[RUNTIME] Headless: ACIK
+[RUNTIME] Devam: opendex_ui
+[RUNTIME] Headless: KAPALI
+  [OK]   headless  — headless ac/kapa
+[RUNTIME] Kaynak baskisi (CPU %95) -> dusuk tuketim moduna geciliyor.
+[RUNTIME] Duraklatildi: opendex_ui (headless)
+[RUNTIME] Headless: ACIK
+[RUNTIME] Duraklatildi: tts (kaynak)
+[RUNTIME] Duraklatildi: shadowbroker (kaynak)
+[RUNTIME] Duraklatildi: websocket (kaynak)
+[RUNTIME] Duraklatildi: realtime_tts (kaynak)
+[RUNTIME] Duraklatildi: open_infra_agent (kaynak)
+[RUNTIME] Duraklatildi: nanobrowser (kaynak)
+[RUNTIME] Duraklatildi: gui_thinker (kaynak)
+[RUNTIME] Duraklatildi: agent_s3 (kaynak)
+[RUNTIME] Duraklatildi: aguvis (kaynak)
+[RUNTIME] Duraklatildi: predictive (kaynak)
+[RUNTIME] Duraklatildi: spec_cache (kaynak)
+[RUNTIME] Duraklatildi: batch_inference (kaynak)
+[RUNTIME] Duraklatildi: moa (kaynak)
+[RUNTIME] Duraklatildi: reflection (kaynak)
+[RUNTIME] Duraklatildi: darwin_godel (kaynak)
+[RUNTIME] Duraklatildi: openclaw (kaynak)
+[RUNTIME] Duraklatildi: evo_cua (kaynak)
+[RUNTIME] Kaynaklar normale dondu -> moduller geri aciliyor.
+[RUNTIME] Devam: tts
+[RUNTIME] Devam: websocket
+[RUNTIME] Devam: opendex_ui
+[RUNTIME] Headless: KAPALI
+[RUNTIME] Devam: shadowbroker
+[RUNTIME] Devam: realtime_tts
+[RUNTIME] Devam: open_infra_agent
+[RUNTIME] Devam: nanobrowser
+[RUNTIME] Devam: gui_thinker
+[RUNTIME] Devam: agent_s3
+[RUNTIME] Devam: aguvis
+[RUNTIME] Devam: predictive
+[RUNTIME] Devam: spec_cache
+[RUNTIME] Devam: batch_inference
+[RUNTIME] Devam: moa
+[RUNTIME] Devam: reflection
+[RUNTIME] Devam: darwin_godel
+[RUNTIME] Devam: openclaw
+[RUNTIME] Devam: evo_cua
+  [OK]   kaynak baskisi kopruleri  — kaynak baskisi -> dusur + geri al
+  [OK]   temp dizin  — C:\Users\ALIYLM~1\AppData\Local\Temp\ales_tmp
+  (mod geri alindi: big_ales)
+
+==============================================================
+4) batch_queue — toplu istek + guvenlik listesi
+==============================================================
+  [OK]   guvenlik listesi  — yikici eylemler toplanmiyor, okuma eylemleri toplaniyor
+  [OK]   toplama  — 5 istek -> 1 cagri (kazanc: 4 cagri)
+  [OK]   zaman asimiyla gonderim  — tek istek 0.15s sonra pencere dolunca gonderildi
+  [OK]   handler hatasi  — handler hatasi cagirana ulasti: patladi
+
+==============================================================
+5) retry_util — geri-alimli yeniden deneme
+==============================================================
+  [OK]   hata siniflandirma  — gecici/kalici hata ayrimi dogru
+  [OK]   2 hatadan sonra basari  — 3. denemede basarili (toplam 3 cagri)
+  [OK]   kalici hata  — kalici hata -> bosuna tekrar yok
+  [OK]   geri-alim buyumesi  — 1s -> 2s -> 4s, ust sinir 15s
+  [OK]   asenkron  — asenkron yeniden deneme (2 cagri)
+
+==============================================================
+6) credentials — kasa (gercek key'ler DEGISTIRILMEZ)
+==============================================================
+  [OK]   kasa backend  — kasa=YOK backend=yok (keyring kurulu degil)
+  [OK]   maskeleme  — maskeleme sirri ifsa etmiyor
+  [OK]   yaz/oku/sil  — kasa yok -> atlandi (pip install keyring)
+  [OK]   denetim  — config.json'da DUZ METIN 7 key: ['groq_key', 'cerebras_key', 'gemini_key', 'openrouter_key', 'nvidia_key', 'sambanova_key', 'elevenlabs_key']
+
+==============================================================
+7) browser_profiles — izole profil kayit defteri
+==============================================================
+  [OK]   olustur  — olusturuldu: __test_profile
+  [OK]   tekrar olustur  — tekrar olusturma reddedildi
+  [OK]   gecersiz kimlik  — gecersiz kimlik reddedildi
+  [OK]   listele  — 1 profil listelendi
+  [OK]   sir icermiyor  — profil dosyasinda sir yok (tasarim geregi)
+  [OK]   sil  — silindi + temizlendi
+
+==============================================================
+8) main.py — endpoint kaydi + kazanc ozeti
+==============================================================
+[ALES] Arayuz klasoru: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\dist
+  [OK]   main import + routeler  — 148 route kayitli, hepsi var
+  [OK]   kazanc ozeti (kaynak+trend)  — total=175.0 today=150.0 kaynak=[('fiverr', 125.0), ('bionluk', 50.0)] trend=30 gun
+  [OK]   /stats sekli  — /stats anahtarlari tamam (60 dakika kovasi)
+
+==============================================================
+9) Faz 2-6 — davranis (gecici dosyalar, gercek veri bozulmaz)
+==============================================================
+  [OK]   import agent_jit
+  [OK]   import speculative_cache
+  [OK]   import token_optimizer
+  [OK]   import contextual_experience_replay
+  [OK]   import adaptive_timeouts
+  [OK]   import darwin_godel
+  [OK]   import batch_inference
+  [OK]   import mixture_of_agents
+  [OK]   import self_evolution
+  [OK]   import reflection_agent
+  [OK]   import versioned_config
+  [OK]   import auto_model_discovery
+  [OK]   import predictive
+  [OK]   import evo_cua_bridge
+  [OK]   import openclaw_bridge
+  [OK]   agent_jit typing  — lookup_graph cagrilabiliyor (Optional importu yerinde)
+  [OK]   agent_jit blok onbellegi  — store -> peek(sayac artmaz) -> lookup(artar) -> invalidate
+  [OK]   agent_jit cizge kimligi  — cizge kimligi bosluk farkina dayanikli
+  [OK]   agent_jit cizge kapisi  — kapi: <2 ayni-katman guvenli cagri -> False
+  [OK]   agent_jit cizge katmanlari  — n1,n2 paralel · n3 bariyer · n4 bariyerden sonra
+  [OK]   agent_jit cizge yurutme  — 3 dugum / 2 katman · hatali dugum '❌' ile modele ulasiyor
+  [OK]   spec cache yaz/oku  — put/get isabet, olmayan anahtar None, invalidate temizledi
+  [OK]   KV onek yeniden kullanimi  — KV onek isabeti, kv_entries=1
+  [OK]   SpecCache gecisleri okunuyor  — SpecCache gecisi okunuyor · yan etkili ad allowlist'te elendi
+  [OK]   mesaj optimizasyonu  — 14 -> 14 mesaj, bilgi: ['complexity', 'pruned_messages', 'recommended_max_tokens', 'tokens_saved']
+  [OK]   arac cikti kisaltma  — 28000 -> 1554 karakter
+  [OK]   token butcesi  — karmasiklik 1 -> 4, butce 3072 token
+  [OK]   deneyim tekrari (CER)  — kayit -> istatistik -> geri getirme -> prompt enjeksiyonu
+  [OK]   dinamik zaman asimi  — fast=3.0s heavy=40.9s (olcumden)
+  [OK]   uydurma uyum skoru yok  — 0 deneme -> fitness None ('bilinmiyor' != 'kotu')
+  [OK]   A/B deneme sekli  — min_trials=12 · sampiyon uyum=None (None = henuz olculmedi)
+
+==============================================================
+MODEL YEDEGI GERI ALMA (model_registry)
+==============================================================
+  [OK]   import model_registry
+  [OK]   kalici/gecici hata ayrimi  — 402 + arac-cagirmiyor kalici · 429/404/kota gecici sayildi
+[REGISTRY] WARN: cerebras: llama-3.3-70b -> gemma-4-31b (otomatik degisim). Sebep: test. config.json DEGISMEDI; geri almak icin Ayarlar > Model Kesfi > SIFIRLA.
+[REGISTRY] WARN: cerebras/gemma-4-31b kara listeye alindi: yedek ise yaramadi: 402 payment_required
+[REGISTRY] WARN: cerebras: llama-3.3-70b -> gemma-4-31b otomatik degisimi GERI ALINDI. Sebep: 402 payment_required. gemma-4-31b kara listede; yeni bir yedek aranacak.
+  [OK]   geri al + kara listeye at  — degisim silindi · yedek kara listede · tekrar cagri guvenli
+[REGISTRY] WARN: groq: llama-3.3-70b-versatile -> allam-2-7b (otomatik degisim). Sebep: t. config.json DEGISMEDI; geri almak icin Ayarlar > Model Kesfi > SIFIRLA.
+[REGISTRY] WARN: groq/allam-2-7b kara listeye alindi: yedek ise yaramadi: no tools
+[REGISTRY] WARN: groq: llama-3.3-70b-versatile -> allam-2-7b otomatik degisimi GERI ALINDI. Sebep: no tools. allam-2-7b kara listede; yeni bir yedek aranacak.
+  [OK]   kullanici modeline dokunulmaz  — yalnizca yedek kara listede · kullanici modeli korundu
+[REGISTRY] WARN: cerebras: llama-3.3-70b -> gemma-4-31b (otomatik degisim). Sebep: t. config.json DEGISMEDI; geri almak icin Ayarlar > Model Kesfi > SIFIRLA.
+[REGISTRY] WARN: cerebras/gemma-4-31b kara listeye alindi: yedek ise yaramadi: 402
+[REGISTRY] WARN: cerebras: llama-3.3-70b -> gemma-4-31b otomatik degisimi GERI ALINDI. Sebep: 402. gemma-4-31b kara listede; yeni bir yedek aranacak.
+  [OK]   geri alinan tekrar secilmez  — tekrar onerilmedi · kalan adaylar: ['llama-4-17b']
+  [OK]   router bu yolu cagiriyor  — kontrol hem _call_layer hem stream_chat acilisinda
+
+==============================================================
+BIG ALES / PUTER (mod + kopru + fail-open)
+==============================================================
+  [OK]   big_ales modu tanimli  — mod cozumleniyor · 2 katman · nousresearch/hermes-3-llama-3.1-405b
+  [OK]   router orkestratoru cagiriyor  — stream_chat + route_chat cagiriyor
+[BIG ALES] orkestrator atlandi (RuntimeError: arayuz bagli degil) -- istek OLDUGU GIBI zincire gidiyor
+  [OK]   Puter patlarsa sohbet olmez  — hata -> istek korunuyor · mod kapali -> liste hic dokunulmuyor
+[BIG ALES] istek yeniden yazildi (nousresearch/hermes-3-llama-3.1-405b, 0.0s): 10 -> 28 karakter
+  [OK]   yalnizca son istek yeniden yazilir  — yalnizca son kullanici mesaji · cagiranin listesi korunuyor
+  [OK]   gorsel iceren istek korunur  — gorsel iceren istek dokunulmadan geciyor
+  [OK]   model beyaz listesi  — beyaz liste disi model engellendi: 3 izinli model
+  [OK]   devre kesici beklemeden doner  — 2 hatadan sonra aninda doner (1ms) · sifirlanabiliyor
+  [OK]   kopru iki yonde bagli  — backend kopru + arayuz cagrisi + SDK etiketi: hepsi bagli
+  [OK]   http kopru sayfasi bagli  — kopru sayfasi + 3 uc + file:// kapisi + is kaydi: bagli
+  [OK]   arayuz http kaynagindan yukleniyor  — loadURL(http://localhost:8000) · dist paketleniyor · tarayici kapali · sw API onbelleklemiyor · kopru yedegi duruyor
+  [OK]   giris penceresi sikilastirildi  — window.ales yalnizca yerel kaynakta · cocuk pencerede webSecurity acik, devTools kapali · yalnizca https + yerel http
+  [OK]   jeton sifreli saklaniyor  — gidis-donus OK · dpapi · cozulmus govdede jeton YOK
+
+==============================================================
+OZET
+==============================================================
+  GECTI : 100
+  KALDI : 0
+
+  Her sey gecti. Moduller main.py'ye baglanmaya hazir.
+[STEP 2] RESULT=OK exit=0 sure=11.3s
+
+====================================================================
+[STEP 3] frontend build (vite)
+  cmd: npm run build
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\frontend
+====================================================================
+
+> ales-ui@2.0.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 34 modules transformed.
+rendering chunks...
+computing gzip size...
+[2m../dist/[22m[32mindex.html                 [39m[1m[2m  4.41 kB[22m[1m[22m[2m │ gzip:   2.12 kB[22m
+[2m../dist/[22m[35massets/index-B-8Fq4SA.css  [39m[1m[2m  0.75 kB[22m[1m[22m[2m │ gzip:   0.41 kB[22m
+[2m../dist/[22m[36massets/index-25xvPv-Y.js   [39m[1m[33m781.85 kB[39m[22m[2m │ gzip: 208.95 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 1.84s[39m
+  urun: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\dist\index.html -> VAR
+[STEP 3] RESULT=OK exit=0 sure=2.9s
+
+[STEP 4] kok node_modules saglik denetimi
+  electron-builder cli.js    VAR
+  @electron/get index.js     VAR
+  electron.exe               YOK
+  -> agac SOYULMUS: npm ustune kuramaz, once silinecek
+  [4a] kilit tutan surec bulunmadi
+  [4b] eski agac silindi (deneme 1)
+
+====================================================================
+[STEP 4] npm kurulum (kok)
+  cmd: npm ci --no-audit --no-fund
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES
+====================================================================
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+npm warn deprecated tar@6.2.1: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+
+added 371 packages in 14s
+  urun: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\node_modules\electron-builder\out\cli\cli.js -> VAR
+[STEP 4] RESULT=OK exit=0 sure=14.2s
+  kurulum sonrasi @electron/get index.js   VAR
+  kurulum sonrasi electron.exe             YOK <-- 6. adim bunu ister
+
+====================================================================
+[STEP 5] PyInstaller backend (ales-backend.spec)
+  cmd: python -m PyInstaller ales-backend.spec --noconfirm --distpath "C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend-dist" --workpath "C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\build"
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend
+====================================================================
+341 INFO: PyInstaller: 6.20.0, contrib hooks: 2026.6
+342 INFO: Python: 3.13.2
+370 INFO: Platform: Windows-11-10.0.26200-SP0
+370 INFO: Python environment: C:\Users\Ali Yılmaz\AppData\Local\Programs\Python\Python313
+C:\Users\Ali Yılmaz\AppData\Local\Programs\Python\Python313\Lib\site-packages\PyInstaller\utils\hooks\__init__.py:665: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  __import__(name)
+20278 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\Ali Yılmaz\\Downloads\\ALES_NVIDIA_updated\\ALES\\backend',
+ 'C:\\Users\\Ali '
+ 'Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\python313.zip',
+ 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\DLLs',
+ 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib',
+ 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313',
+ 'C:\\Users\\Ali '
+ 'Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages',
+ 'C:\\Users\\Ali '
+ 'Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\win32',
+ 'C:\\Users\\Ali '
+ 'Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\Ali '
+ 'Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\Pythonwin',
+ 'C:\\Users\\Ali Yılmaz\\Downloads\\ALES_NVIDIA_updated\\ALES\\backend',
+ 'C:\\Users\\Ali Yılmaz\\Downloads\\ALES_NVIDIA_updated\\ALES']
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.2)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+21794 INFO: Appending 'datas' from .spec
+21858 INFO: checking Analysis
+21965 INFO: Building because hiddenimports changed
+21965 INFO: Looking for Python shared library...
+21965 INFO: Using Python shared library: C:\Users\Ali Yılmaz\AppData\Local\Programs\Python\Python313\python313.dll
+21965 INFO: Running Analysis Analysis-00.toc
+21965 INFO: Target bytecode optimization level: 0
+21965 INFO: Initializing module dependency graph...
+21969 INFO: Initializing module graph hook caches...
+22056 INFO: Analyzing modules for base_library.zip ...
+24200 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+27057 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+29666 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+31762 INFO: Caching module dependency graph...
+31834 INFO: Analyzing C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\main.py
+32578 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+32926 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+33508 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+34575 INFO: Processing standard module hook 'hook-psutil.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+34744 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+35321 INFO: Processing standard module hook 'hook-pydantic.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36061 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+36064 INFO: SetuptoolsInfo: initializing cached setuptools info...
+38433 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+38502 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+41296 INFO: Processing standard module hook 'hook-anyio.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+44304 INFO: Processing pre-find-module-path hook 'hook-tkinter.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+44307 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+45130 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+45234 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+45391 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+45984 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+48957 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+51865 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+53005 INFO: Processing standard module hook 'hook-pycparser.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+53299 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+53359 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+53455 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+53457 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+53485 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+53487 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+54083 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+54603 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+54606 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+54634 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+54635 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+55152 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+55153 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+55200 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+55329 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+55330 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+55948 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+55949 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+57028 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+57029 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+58811 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+59026 INFO: Processing standard module hook 'hook-cv2.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+420 WARNING: Failed to collect submodules for 'cv2.gapi' because importing 'cv2.gapi' raised: AttributeError: module 'cv2' has no attribute 'gapi_wip_gst_GStreamerPipeline'
+C:\Users\Ali Yılmaz\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyautogui\_pyautogui_x11.py:284: SyntaxWarning: invalid escape sequence '\e'
+  '\e': _display.keysym_to_keycode(Xlib.XK.string_to_keysym('Escape')),
+60766 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+74113 INFO: Processing standard module hook 'hook-websockets.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+81925 INFO: Processing standard module hook 'hook-google.api_core.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+83418 INFO: Processing standard module hook 'hook-grpc.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+84588 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+85814 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+87846 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+98678 INFO: Processing standard module hook 'hook-httplib2.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+99857 INFO: Processing standard module hook 'hook-googleapiclient.model.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+102113 INFO: Processing standard module hook 'hook-selenium.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+104356 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+105081 INFO: Processing standard module hook 'hook-playwright.async_api.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\playwright\\_impl\\__pyinstaller'
+109248 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+109699 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+110356 INFO: Processing standard module hook 'hook-pyttsx3.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110393 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+110547 INFO: Processing standard module hook 'hook-win32com.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110557 INFO: Processing standard module hook 'hook-pythoncom.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+110693 INFO: Processing standard module hook 'hook-pywintypes.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+112973 INFO: Processing standard module hook 'hook-uvicorn.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+114398 INFO: Analyzing hidden import 'uvicorn.loops'
+114399 INFO: Analyzing hidden import 'uvicorn.loops.auto'
+114424 INFO: Analyzing hidden import 'uvicorn.protocols.http.auto'
+114434 INFO: Analyzing hidden import 'uvicorn.protocols.websockets.auto'
+114443 INFO: Analyzing hidden import 'uvicorn.lifespan'
+114445 INFO: Analyzing hidden import 'uvicorn.lifespan.on'
+114464 INFO: Analyzing hidden import 'uvicorn.lifespan.off'
+114477 INFO: Analyzing hidden import 'repair_model_chain'
+114495 INFO: Analyzing hidden import 'edge_tts.__main__'
+114638 INFO: Analyzing hidden import 'google.generativeai.answer'
+114734 INFO: Analyzing hidden import 'google.generativeai.notebook'
+115309 INFO: Analyzing hidden import 'google.generativeai.notebook.post_process_utils_test_helper'
+115320 INFO: Analyzing hidden import 'google.generativeai.permission'
+115336 INFO: Analyzing hidden import 'google.generativeai.retriever'
+115356 INFO: Analyzing hidden import 'google.generativeai.types.answer_types'
+115370 INFO: Analyzing hidden import 'google.generativeai.types.palm_safety_types'
+115391 INFO: Processing module hooks (post-graph stage)...
+115719 WARNING: Hidden import "pycparser.lextab" not found!
+115719 WARNING: Hidden import "pycparser.yacctab" not found!
+116555 INFO: Processing standard module hook 'hook-comtypes.client.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+118078 WARNING: Hidden import "tzdata" not found!
+118778 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+119007 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks'
+119050 INFO: Performing binary vs. data reclassification (1900 entries)
+139769 INFO: Looking for ctypes DLLs
+140239 INFO: Analyzing run-time hooks ...
+140253 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+140268 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+140278 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+140293 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+140305 INFO: Including run-time hook 'pyi_rth_pywintypes.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+140314 INFO: Including run-time hook 'pyi_rth_pythoncom.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+140317 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+140331 INFO: Including run-time hook 'pyi_rth__tkinter.py' from 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+140439 INFO: Creating base_library.zip...
+140469 INFO: Looking for dynamic libraries
+C:\Users\Ali Yılmaz\AppData\Local\Programs\Python\Python313\Lib\site-packages\PyInstaller\building\build_main.py:227: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  __import__(package)
+148638 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\cv2\\../../x64/vc17/bin']
+148638 INFO: Extra DLL search directories (PATH): ['C:\\Users\\Ali Yılmaz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\cv2\\../../x64/vc17/bin']
+152688 INFO: Warnings written to C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\build\ales-backend\warn-ales-backend.txt
+153039 INFO: Graph cross-reference written to C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\build\ales-backend\xref-ales-backend.html
+153266 INFO: checking PYZ
+153339 INFO: Building because toc changed
+153339 INFO: Building PYZ (ZlibArchive) C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\build\ales-backend\PYZ-00.pyz
+155640 INFO: Building PYZ (ZlibArchive) C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\build\ales-backend\PYZ-00.pyz completed successfully.
+155824 INFO: checking PKG
+155889 INFO: Building because toc changed
+155889 INFO: Building PKG (CArchive) ales-backend.pkg
+206075 INFO: Building PKG (CArchive) ales-backend.pkg completed successfully.
+206136 INFO: Bootloader C:\Users\Ali Yılmaz\AppData\Local\Programs\Python\Python313\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+206136 INFO: checking EXE
+206191 INFO: Building because toc changed
+206191 INFO: Building EXE from EXE-00.toc
+206193 INFO: Copying bootloader EXE to C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend-dist\ales-backend.exe
+206298 INFO: Copying icon to EXE
+206356 INFO: Copying 0 resources to EXE
+206356 INFO: Embedding manifest in EXE
+206407 INFO: Appending PKG archive to EXE
+206551 INFO: Fixing EXE headers
+207522 INFO: Building EXE from EXE-00.toc completed successfully.
+207581 INFO: Build complete! The results are available in: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend-dist
+[ales-backend.spec] backend modulu : 64 adet
+[ales-backend.spec] opsiyonel, KURULU DEGIL (exe'ye girmez, ALES yedege duser):
+            - sqlite_vec    vektor hafiza -> yoksa Python kosinus taramasi
+            - keyring       kimlik saklama -> yoksa sifreli yerel dosya
+            - pynvml        GPU olcumu -> yoksa GPU alani bos gecer
+            - uiautomation  masaustu denetim erisimi -> yoksa ctypes+user32
+            - pywinauto     masaustu denetim erisimi (alternatif)
+            - RealtimeTTS   akisli TTS -> yoksa edge-tts cumle akisi
+  urun: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend-dist\ales-backend.exe -> VAR
+[STEP 5] RESULT=OK exit=0 sure=208.1s
+
+====================================================================
+[STEP 6] electron-builder --win portable
+  cmd: npx --no-install electron-builder --win portable
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES
+====================================================================
+  • electron-builder  version=24.13.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\package.json
+  • packaging       platform=win32 arch=x64 electron=31.7.7 appOutDir=release\win-unpacked
+  • building        target=portable file=release\ALES.exe archs=x64
+  urun: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\release\ALES.exe -> VAR
+[STEP 6] RESULT=OK exit=0 sure=120.6s
+
+====================================================================
+[STEP 7] model zinciri onarimi
+  cmd: python repair_model_chain.py
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend
+====================================================================
+[config] .env yuklendi: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\.env (4 degisken)
+[CONFIG] AppData klasoru: C:\Users\Ali Yılmaz\AppData\Roaming\ALES
+========================================================================
+ALES MODEL ZINCIRI ONARIMI
+========================================================================
+
+MEVCUT OTOMATIK YEDEKLER (ALES'in koydugu, kullanicinin degil):
+  nvidia: deepseek-ai/deepseek-v4-pro  ->  deepseek-ai/deepseek-v4-pro-0813
+
+Her katman ARAC LISTESIYLE gercekten cagriliyor...
+
+[REGISTRY] WARN: cerebras/llama-3.3-70b: gecersiz model hatasi — liste tazeleniyor. Hata: NotFoundError: Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'mode
+[REGISTRY] WARN: cerebras/llama-3.3-70b kara listeye alindi: saglayici reddetti: NotFoundError: Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found
+[REGISTRY] WARN: cerebras: llama-3.3-70b -> qwen-3.8-27b (otomatik degisim). Sebep: gecersiz model adi. config.json DEGISMEDI; geri almak icin Ayarlar > Model Kesfi > SIFIRLA.
+[REGISTRY] WARN: cerebras/qwen-3.8-27b kara listeye alindi: yedek ise yaramadi: APIStatusError: Error code: 402 - {'message': 'Payment required to access this resource. Visit your billing tab.', 'type': 'payment_required_error', '
+[REGISTRY] WARN: cerebras: llama-3.3-70b -> qwen-3.8-27b otomatik degisimi GERI ALINDI. Sebep: APIStatusError: Error code: 402 - {'message': 'Payment required to access this resource. Visit your billing tab.', 'type': 'payment_required_error', '. qwen-3.8-27b kara listede; yeni bir yedek aranacak.
+[REGISTRY] WARN: cerebras/llama-3.3-70b: kullanilabilir bir yedek KALMADI — Ayarlar > Modeller'den elle secim gerekiyor.
+  [FAIL] fast          cerebras/qwen-3.8-27b
+         durum: YEDEK YOK · APIStatusError: Error code: 402 - {'message': 'Payment required to access this resource. Visit your billing tab.', 'type': 'payment_required_error', '
+         denenen: llama-3.3-70b -> qwen-3.8-27b
+[REGISTRY] WARN: groq/llama-3.3-70b-versatile: gecersiz model hatasi — liste tazeleniyor. Hata: NotFoundError: Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_r
+[REGISTRY] WARN: groq/llama-3.3-70b-versatile kara listeye alindi: saglayici reddetti: NotFoundError: Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not
+[REGISTRY] WARN: groq: llama-3.3-70b-versatile -> allam-2-7b (otomatik degisim). Sebep: gecersiz model adi. config.json DEGISMEDI; geri almak icin Ayarlar > Model Kesfi > SIFIRLA.
+[REGISTRY] WARN: groq/allam-2-7b kara listeye alindi: yedek ise yaramadi: BadRequestError: Error code: 400 - {'error': {'message': '`tool calling` is not supported with this model', 'type': 'invalid_request_error', 'param': 
+[REGISTRY] WARN: groq: llama-3.3-70b-versatile -> allam-2-7b otomatik degisimi GERI ALINDI. Sebep: BadRequestError: Error code: 400 - {'error': {'message': '`tool calling` is not supported with this model', 'type': 'invalid_request_error', 'param': . allam-2-7b kara listede; yeni bir yedek aranacak.
+[REGISTRY] WARN: groq/llama-3.3-70b-versatile: kullanilabilir bir yedek KALMADI — Ayarlar > Modeller'den elle secim gerekiyor.
+  [FAIL] fallback      groq/allam-2-7b
+         durum: YEDEK YOK · BadRequestError: Error code: 400 - {'error': {'message': '`tool calling` is not supported with this model', 'type': 'invalid_request_error', 'param': 
+         denenen: llama-3.3-70b-versatile -> allam-2-7b
+[CONFIG] UYARI: gemini_key yanlis turde bir kimlik bilgisi iceriyor ve YOK SAYILIYOR -> Google OAuth2 erisim jetonu (API anahtari degil). aistudio.google.com/apikey adresinden 'AIza...' ile baslayan bir API anahtari alip config.json > gemini_key alanina yazin.
+  [KEY]  vision        gemini/gemini-2.0-flash
+         durum: NOKEY · anahtar yok
+  [FAIL] code          openrouter/qwen/qwen3.8-27b
+         durum: FAIL · APIStatusError: Error code: 402 - {'error': {'message': 'Insufficient credits. This account never purchased credits. Make sure your key is on the corr
+  [FAIL] unrestricted  nvidia/deepseek-ai/deepseek-v4-pro-0813
+         durum: FAIL · APIStatusError: Error code: 410 - {'type': 'about:blank', 'title': 'Gone', 'status': 410, 'detail': "The model 'deepseek-ai/deepseek-v4-pro-0813' has 
+  [FAIL] heavy         openrouter/moonshotai/kimi-k3
+         durum: FAIL · APIStatusError: Error code: 402 - {'error': {'message': 'Insufficient credits. This account never purchased credits. Make sure your key is on the corr
+
+========================================================================
+CALISAN KATMANLAR : YOK
+CALISMAYANLAR     : fast(YEDEK YOK), fallback(YEDEK YOK), vision(NOKEY), code(FAIL), unrestricted(FAIL), heavy(FAIL)
+------------------------------------------------------------------------
+SOHBET: OLU — birincil zincirde (fast/fallback) calisan katman YOK.
+        Yukaridaki hata metni sebebi soyler. Kota/odeme hatasiysa
+        saglayici hesabi, 'anahtar yok' ise config.json gerekiyor.
+model_cache.json guncellendi.
+========================================================================
+[STEP 7] RESULT=FAIL exit=1 sure=8.6s
+
+====================================================================
+[STEP 8] paketlenmis exe duman testi
+  cmd: python smoke_test_exe.py
+  cwd: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES
+====================================================================
+
+======================================================================
+1) URUN DOSYALARI
+======================================================================
+  [OK]   dist/index.html  -- 4,587 bayt
+  [OK]   backend-dist/ales-backend.exe  -- 170,873,644 bayt
+  [OK]   release/ALES.exe  -- 240,252,272 bayt
+  [OK]   paket icinde resources/dist/index.html  -- 4,587 bayt
+  [OK]   paket icinde resources/ales-backend.exe  -- 170,873,644 bayt
+
+======================================================================
+2) 8000 PORTU
+======================================================================
+  [OK]   port bos  -- 8000 dinlenmiyor
+
+======================================================================
+3) BACKEND EXE TEK BASINA
+======================================================================
+  baslatiliyor: C:\Users\Ali Yılmaz\Downloads\ALES_NVIDIA_updated\ALES\backend-dist\ales-backend.exe
+  (onefile arsivi ilk acilista gecici klasore aciliyor — 30-90s normal)
+  [OK]   backend ayaga kalkti  -- 9.0s icinde /status 200
+  [OK]   /jit/graphs cevap veriyor  -- graphs, compiled, executed, nodes_run, layers, nodes_per_layer
+  [OK]   /spec-cache/stats cevap veriyor  -- entries, max_entries, kv_entries, max_kv_entries, hits, misses
+  [OK]   Big ALES modu secilebilir  -- /modes listesinde var (8 mod)
+  [OK]   Big ALES ucu ayakta  -- model=nousresearch/hermes-3-llama-3.1-405b · oturum=yok · sifreleme=none
+  [OK]   Puter kopru sayfasi ayakta  -- 3356 bayt · SDK etiketi var
+
+======================================================================
+4) SOHBET (WebSocket /ws)
+======================================================================
+  [FAIL] sohbet birincil zincirden cevap veriyor
+         -> cevap ACIL DURUM yolundan geldi (duz metin, aracsiz). Birincil zincir (fast/fallback) olu — repair_model_chain.py ciktisina bak: kota/odeme/anahtar sorunu. ilk 80: "Merhaba, ben Ali'nin kişisel AI agenti ve iş ortağı ALES, Profesyonel ama samimi"
+
+======================================================================
+5) ARAC CAGIRMA
+======================================================================
+  [FAIL] arac cagrildi
+         -> arac dogrulanamadi cunku cevap ACIL DURUM yolundan geldi: o yol modele arac arayuzu VERMEZ (main.py:2294) ve bunu cevabin sonunda kendisi de yaziyor. Kod arizasi DEGIL; birincil zincir ayaga kalkmadan bu asama olculemez.
+
+  backend kapatiliyor...
+  [OK]   backend kapatildi  -- 8000 portu bosaldi
+
+======================================================================
+6) MASAUSTU PENCERESI (release/ALES.exe)
+======================================================================
+  pencere bekleniyor (portable exe kendini aciyor, 60s'e kadar normal)...
+  [FAIL] masaustu penceresi acildi
+         -> 90.0s icinde basliginda 'ALES' olan gorunur pencere bulunamadi
+  [OK]   konsol penceresi yok  -- gorunur ConsoleWindowClass penceresi yok
+  [OK]   Electron backend'i baslatti  -- 8000 portu dinleniyor
+
+  masaustu uygulamasi kapatiliyor...
+
+======================================================================
+OZET
+======================================================================
+  GECTI : 15
+  KALDI : 3
+
+  Basarisiz olanlar:
+    - sohbet birincil zincirden cevap veriyor: cevap ACIL DURUM yolundan geldi (duz metin, aracsiz). Birincil zincir (fast/fallback) olu — repair_model_chain.py ciktisina bak: kota/odeme/anahtar sorunu. ilk 80: "Merhaba, ben Ali'nin kişisel AI agenti ve iş ortağı ALES, Profesyonel ama samimi"
+    - arac cagrildi: arac dogrulanamadi cunku cevap ACIL DURUM yolundan geldi: o yol modele arac arayuzu VERMEZ (main.py:2294) ve bunu cevabin sonunda kendisi de yaziyor. Kod arizasi DEGIL; birincil zincir ayaga kalkmadan bu asama olculemez.
+    - masaustu penceresi acildi: 90.0s icinde basliginda 'ALES' olan gorunur pencere bulunamadi
+[STEP 8] RESULT=FAIL exit=3 sure=235.3s
+
+====================================================================
+OZET
+====================================================================
+  [0] arac surumleri                         SKIPPED
+  [0] PyInstaller hazir                      SKIPPED
+  [1] py_compile (sozdizimi)                 OK (exit=0)
+  [1] node --check (JS sozdizimi)            OK (exit=0)
+  [2] test_new_modules.py                    OK (exit=0)
+  [3] frontend build (vite)                  OK (exit=0)
+  [4] npm kurulum (kok)                      OK (exit=0)
+  [5] PyInstaller backend (ales-backend.spec) OK (exit=0)
+  [6] electron-builder --win portable        OK (exit=0)
+  [7] model zinciri onarimi                  FAIL (exit=1)
+  [8] paketlenmis exe duman testi            FAIL (exit=3)
+
+  dist/index.html                  4587 bayt
+  backend-dist/ales-backend.exe    170873644 bayt
+  release/ALES.exe                 240252272 bayt
+
+finished: 2026-10-06 22:31:18

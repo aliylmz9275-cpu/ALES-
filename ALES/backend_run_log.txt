@@ -1,0 +1,85 @@
+C:\Users\Ali Yýlmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\main.py:4865: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+C:\Users\Ali Yýlmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\main.py:5057: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+INFO:     Started server process [19140]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+[config] .env yuklendi: C:\Users\Ali Yýlmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\.env (4 degisken)
+[CONFIG] AppData klasoru: C:\Users\Ali Yýlmaz\AppData\Roaming\ALES
+[ALES] Arayuz klasoru: C:\Users\Ali Yýlmaz\Downloads\ALES_NVIDIA_updated\ALES\dist
+[ALES] v3.0 baslatiliyor...
+[ALES] Arayuz: http://localhost:8000   (kapatmak icin bu pencerede Ctrl+C)
+[RESOURCE] Kaynak izleyici basladi.
+[ALES] moduller acik: codeact, agent_jit, predictive, plugins, skills_growth, self_heal, native_desktop, realtime_tts, token_optimizer, spec_cache, batch_inference, moa, cer, self_evolution, reflection, darwin_godel, evo_cua, adaptive_timeouts, versioned_config
+[ALES] moduller kapali: vector_memory, openclaw
+[ALES] 0 eklenti bulundu, 0 aktif
+[HEAL] Önceki kapanýþ temiz deðildi
+[HEAL] gorev denetcisi calisiyor (scheduler, notifier, sleep_watch)
+[ALES] model kesfi zamanlayicisi calisiyor (30 dakikada bir)
+[ALES] model uzlastirici calisiyor (30 dakikada bir, sadece dogrulama — degisiklik uygulamaz)
+[ALES] Darwin Godel evrim dongusu calisiyor (aday yoksa 60 dakikada bir yeni aday)
+[ALES] v3.0 tam kapasite hazir!
+[SCHEDULER] Motoru basladi...
+[NOTIFIER] Motoru basladi...
+INFO:     127.0.0.1:53264 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53264 - "GET /assets/index-3x7pl6XL.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57590 - "GET /assets/index-B-8Fq4SA.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57746 - "GET /manifest.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53264 - "GET /icon-192.png HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53264 - "GET /sw.js HTTP/1.1" 200 OK
+[CONFIG] UYARI: gemini_key yanlis turde bir kimlik bilgisi iceriyor ve YOK SAYILIYOR -> Google OAuth2 erisim jetonu (API anahtari degil). aistudio.google.com/apikey adresinden 'AIza...' ile baslayan bir API anahtari alip config.json > gemini_key alanina yazin.
+[REGISTRY] WARN: vision (gemini/gemini-2.0-flash): saglayicinin listesinde YOK. Oneriler: gemini-2.5-flash, gemini-3.5-flash, gemini-3.6-flash. Cagri YINE denenecek (liste eksik olabilir).
+[REGISTRY] WARN: unrestricted (nvidia/deepseek-ai/deepseek-v4-pro): saglayicinin listesinde YOK. Oneriler: deepseek-ai/deepseek-v4-pro-0813, deepseek-ai/deepseek-v4-flash-0731, deepseek-ai/deepseek-coder-6.7b-instruct. Cagri YINE denenecek (liste eksik olabilir).
+INFO:     127.0.0.1:53264 - "GET /conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52652 - "GET /logs HTTP/1.1" 200 OK
+INFO:     ('127.0.0.1', 59407) - "WebSocket /ws?key=011111" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:52652 - "GET /approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59408 - "GET /modes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52652 - "GET /approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59409 - "GET /batch-inference/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59410 - "GET /spec-cache/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59411 - "GET /token-optimizer/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59412 - "GET /predictive/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59413 - "GET /moa/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59414 - "GET /cer/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59415 - "GET /cer/experiences HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59416 - "GET /reflection/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59417 - "GET /self-evolution/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59418 - "GET /darwin-godel/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59419 - "GET /darwin-godel/trial HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59420 - "GET /openclaw/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59421 - "GET /evocua/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59422 - "GET /adaptive-timeouts/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59423 - "GET /config-versions?limit=15 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59424 - "GET /auto-discovery/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59425 - "GET /env-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59426 - "GET /jit HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52652 - "GET /approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52652 - "GET /approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52652 - "GET /conversations HTTP/1.1" 200 OK
+C:\Users\Ali Yýlmaz\Downloads\ALES_NVIDIA_updated\ALES\backend\long_term_memory.py:105: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+[LTM] Gemini embedding kullanilamadi -> bu oturum boyunca yerel 256-boyutlu embedder kullanilacak.
+[MODE] performance · [ROUTER] Daima acik: ['pc_control', 'filesystem', 'web', 'code', 'worldview', 'memory'] | Ek: ['yok'] -> 35/79 arac
+INFO:     127.0.0.1:52652 - "GET /approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52652 - "GET /approvals HTTP/1.1" 200 OK

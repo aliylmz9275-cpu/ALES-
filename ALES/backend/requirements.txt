@@ -1,0 +1,94 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+groq==0.11.0
+openai==2.33.0
+python-dotenv==1.0.1
+httpx==0.27.2
+pyautogui==0.9.54
+Pillow==10.4.0
+psutil==6.0.0
+mss==9.0.2
+websockets==13.0
+edge-tts==6.1.12
+cerebras-cloud-sdk==1.14.0
+google-generativeai==0.8.6
+selenium==4.24.0
+webdriver-manager==4.0.2
+playwright==1.44.0
+pytesseract==0.3.13
+pyperclip==1.9.0
+keyring==25.4.1
+
+# ===================================================================
+# OPSIYONEL - HICBIRI ZORUNLU DEGIL
+# ===================================================================
+# Yukaridaki blok ALES'i calistirmak icin yeterlidir. Asagidakiler yalnizca
+# ilgili ozelligi HIZLANDIRIR veya GENISLETIR. Kurulu degillerse ilgili modul
+# kendi yedegine duser ve uygulama normal calismaya devam eder -- import
+# hatasi, cokme veya sessiz veri kaybi OLMAZ.
+#
+# BILINCLI OLARAK YORUMLU: "pip install -r requirements.txt" komutunun
+# beklenmedik sekilde buyuk paket zincirleri indirmeye baslamamasi icin.
+# Istediginiz satirin basindaki '#' isaretini kaldirip kurun.
+#
+# --- Vektor hafiza (long_term_memory.py) ---------------------------
+# Yoksa: Python kosinus ile TUM tablo taranir (sonuc ayni, sadece yavas).
+# Kurduktan sonra: UI > Teshis > "Vektor indeksini kur" (mevcut anilar
+# indekse tasinir; yoksa yalnizca yeni anilar indekslenir).
+# sqlite-vec==0.1.6
+#
+# --- Akisli sesli yanit (audio_streamer.py) ------------------------
+# Yoksa: edge-tts (yukarida, ZORUNLU blokta) cumle cumle akis yapar.
+# RealtimeTTS ilk sesi daha da kisaltir; SystemEngine (tamamen cevrimdisi
+# yerel Windows sesleri) icin pyttsx3 gerekir.
+# NOT: Bu iki motor PC'nin HOPARLORUNDEN calar, telefon tarayicisina
+# gitmez -- uzaktan kullanimda edge-tts akisi dogru secimdir.
+# RealtimeTTS==0.4.15
+# pyttsx3==2.98
+#
+# --- Windows masaustu kontrolu (native_desktop.py) ----------------
+# Yoksa: pencere listeleme / odaklama / buyutme / kapatma ctypes+user32
+# ile ZATEN calisir (hicbir kurulum gerektirmez).
+# Bu ikisi yalnizca DENETIM erisimi icindir: "Kaydet butonuna bas",
+# "Ara kutusuna sunu yaz" gibi komutlar.
+# uiautomation==2.0.20
+# pywinauto==0.6.8
+#
+# --- GPU olcumu (resource_monitor.py) -----------------------------
+# Yoksa: CPU/RAM/disk olculur, GPU alani bos gecer.
+# nvidia-ml-py==12.560.30
+#
+# --- Statik site kazima sablonu (skills/scraper_static_template.py) --
+# ALES bu sablonu read_skill ile OKUR ve ustune kod yazar; uretilen kod
+# requests + BeautifulSoup kullanir. Ikisi kurulu degilse uretilen kod
+# "ModuleNotFoundError" ile duser. ZORUNLU degil: dinamik sablon
+# (playwright, yukarida zorunlu blokta) ayni isi JS'li sitelerde de yapar.
+# requests==2.32.3
+# beautifulsoup4==4.12.3
+
+# ===================================================================
+# FAZ 2-6 MODULLERI: YENI PAKET GEREKTIRMEZ
+# ===================================================================
+# agent_jit · speculative_cache · batch_inference · token_optimizer ·
+# mixture_of_agents · contextual_experience_replay · self_evolution ·
+# reflection_agent · darwin_godel · openclaw_bridge · evo_cua_bridge ·
+# native_desktop · self_heal · adaptive_timeouts · versioned_config ·
+# auto_model_discovery · predictive
+#
+# Hepsi YALNIZCA Python standart kutuphanesini (json, time, threading,
+# hashlib, math, difflib, asyncio, pathlib) ve yukaridaki ZORUNLU bloktaki
+# httpx / pyautogui'yi kullanir. Bu satir bilerek yaziliyor: bir modul
+# calismadiginda "eksik paket mi acaba" diye arama yapilmasin -- sebep
+# paket degil, ya API anahtari ya da UI'daki modul anahtarıdir
+# (Ayarlar > Sistem > Modul anahtarlari).
+#
+# ONEMLI: DSPy / GEPA prompt evrimi icin bir LLM'e kod yazdirilir; ayri bir
+# 'dspy' paketi KURULMAZ. Evrim tamamen metin (istem + tarif) duzeyindedir --
+# ALES kendi kaynak kodunu degistirmez, model agirligi egitmez.
+
+# ===================================================================
+# PAKETLEME - yalnizca ALES.exe URETMEK icin gerekir
+# ===================================================================
+# ALES'i CALISTIRMAK icin gerekmez; .exe'yi yeniden derlemek icin gerekir.
+# Derleme: proje kokunde "build_exe.bat" (veya "pyinstaller ALES.spec").
+pyinstaller==6.20.0

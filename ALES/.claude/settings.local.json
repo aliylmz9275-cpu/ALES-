@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(python3 -c \"print\\(f'{\\\\\"?\\\\\":,}'\\)\")",
+      "Bash(echo \"---EXIT $?---\")",
+      "Bash(python -c \"print\\(format\\('?', ','\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python _fptest.py)",
+      "Bash(python -c \"import multi_agent as m; print\\('_call_gemini:', callable\\(m._call_gemini\\)\\); print\\('_call_sambanova:', callable\\(m._call_sambanova\\)\\); print\\('_call_openrouter:', callable\\(m._call_openrouter\\)\\)\")",
+      "Bash(python -m py_compile main.py model_router.py semantic_cache.py fast_path.py multi_agent.py config_manager.py)",
+      "Bash(python _wire_smoke.py)",
+      "Bash(python -c \"import semantic_cache as sc; sc.get_cache\\(\\).clear\\(\\); sc.store\\('Fransanin baskenti neresidir', 'Paris.', namespace='task'\\); print\\('reorder+punct HIT:', \\(sc.lookup\\(\\\\\"Fransa'nin baskenti neresidir?\\\\\", namespace='task'\\) or {}\\).get\\('answer'\\)\\); print\\('cross-ns MISS:', sc.lookup\\('Fransanin baskenti neresidir', namespace='cheat'\\)\\); sc.get_cache\\(\\).clear\\(\\)\")",
+      "Bash(npm run *)",
+      "Bash(python -)",
+      "Bash(python -m pip check)",
+      "Bash(rm -f _t.py)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:arxiv.org)",
+      "Bash(python -m py_compile main.py)",
+      "Bash(python -c \"import main; paths=[r.path for r in main.app.routes]; assert '/earnings' in paths, paths; assert '/earnings/{eid}' in paths, paths; s=main._earnings_summary\\([{'amount':100,'currency':'TRY','time':main.datetime.now\\(\\).isoformat\\(\\)},{'amount':'50','time':'2020-01-01T00:00'}]\\); print\\('SUMMARY_OK', s['total'], s['today'], s['currency'], s['count']\\); print\\('ROUTES_OK'\\)\")",
+      "Bash(sort -k2)",
+      "Bash(pip --version)",
+      "Bash(grep -n \"const \\\\[\\\\|function \\\\|=> {$\\\\|useEffect\\\\|const API\\\\|WS_URL\\\\|tab ===\\\\|setTab\" App.jsx)",
+      "Bash(nvidia-smi)",
+      "Bash(ollama --version)",
+      "Bash(pip list *)",
+      "Bash(python -m py_compile resource_monitor.py runtime_state.py batch_queue.py long_term_memory.py credentials.py browser_profiles.py retry_util.py main.py)",
+      "Bash(python test_new_modules.py)",
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")"
+    ]
+  }
+}

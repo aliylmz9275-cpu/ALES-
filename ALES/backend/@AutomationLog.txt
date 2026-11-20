@@ -1,0 +1,1 @@
+2026-10-17 16:01:32.721 native_desktop.py[722] test_desktop_control -> Find Control Timeout(10s): {ControlType: EditControl}

@@ -1,0 +1,20 @@
+{
+  "_README": [
+    "Kalici sistem promptu (LUBV). Buradaki 'lubv.text' her konusmaya system",
+    "rolu olarak enjekte edilir (config_manager.get_system_prompt + main.py).",
+    "",
+    "NASIL AKTIF EDILIR:",
+    "  1) 'lubv.text' alanina TAM 'LUBV V1 Ready' metnini yapistir.",
+    "  2) 'lubv.enabled' -> true yap.",
+    "  3) Backend'i yeniden baslat (veya /config kaydet).",
+    "",
+    "enabled=false veya text bos ise enjeksiyon ATLANIR (mevcut BASE_SYSTEM",
+    "promptu bozulmaz). GUVENLIK: buraya sifre/API key/mahrem bilgi yazma.",
+    "Bu dosya AppData/Roaming/ALES/system_prompts.json'a kopyalanirsa oradaki",
+    "surum oncelik kazanir (kullanici duzenlemeleri kalici olur)."
+  ],
+  "lubv": {
+    "enabled": false,
+    "text": ""
+  }
+}

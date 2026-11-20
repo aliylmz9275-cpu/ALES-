@@ -1,0 +1,63 @@
+{
+  "_README": "Zero-LLM Fast Path tanimlari (fast_path.py okur). Her giris kisa, tek-anlamli bir komutu dogrudan mevcut bir araca baglar - AI'ya ugramadan (<50ms). Eslesme muhafazakardir: kisa+emir-kipi mesajlar. Supheliyse eslesmez, istek normal AI'ya gider. Tohumlar SALT-OKUNUR/guvenli araclardir. Yeni skill = bu listeye yeni bir nesne (name, match, steps). steps[].tool main.py execute_tool'daki bir arac adi olmali. AppData/Roaming/ALES/skills.json varsa o oncelik kazanir.",
+  "skills": [
+    {
+      "name": "screenshot",
+      "platform": "windows",
+      "enabled": true,
+      "match": { "regex": "^(ekran(i|imi)?\\s*(goruntusu|goruntusunu|yakala|resmi)?|ss al|screenshot)\\s*(al|cek)?$", "max_words": 4 },
+      "steps": [ { "tool": "take_screenshot", "args": { "region": "auto" } } ],
+      "error_handling": "route_to_ai"
+    },
+    {
+      "name": "system_info",
+      "platform": "any",
+      "enabled": true,
+      "match": { "keywords": [["sistem", "bilgisi"], ["sistem", "durumu"], ["pc", "durumu"]], "max_words": 5 },
+      "steps": [ { "tool": "get_system_info", "args": {} } ],
+      "error_handling": "route_to_ai"
+    },
+    {
+      "name": "crypto_prices",
+      "platform": "any",
+      "enabled": true,
+      "match": { "keywords": [["kripto", "fiyat"], ["kripto", "fiyatlari"], ["bitcoin", "fiyat"]], "max_words": 5 },
+      "steps": [ { "tool": "get_crypto_prices", "args": {} } ],
+      "error_handling": "route_to_ai"
+    },
+    {
+      "name": "exchange_rates",
+      "platform": "any",
+      "enabled": true,
+      "match": { "keywords": [["doviz", "kuru"], ["doviz", "kurlari"], ["dolar", "kuru"]], "max_words": 5 },
+      "steps": [ { "tool": "get_exchange_rates", "args": {} } ],
+      "error_handling": "route_to_ai"
+    },
+    {
+      "name": "news_tr",
+      "platform": "any",
+      "enabled": true,
+      "match": { "keywords": [["son", "dakika"], ["haberler"], ["gundem"]], "max_words": 4 },
+      "steps": [ { "tool": "get_news_tr", "args": {} } ],
+      "error_handling": "route_to_ai"
+    },
+    {
+      "name": "weather_city",
+      "platform": "any",
+      "enabled": true,
+      "match": { "regex": "^([a-z\\s]+?)\\s+hava(\\s*durumu)?$", "max_words": 4 },
+      "capture": { "1": { "into_step": 0, "arg": "city" } },
+      "steps": [ { "tool": "get_weather", "args": { "city": "Istanbul" } } ],
+      "error_handling": "route_to_ai"
+    },
+    {
+      "name": "open_app",
+      "platform": "windows",
+      "enabled": true,
+      "match": { "regex": "^([a-z0-9\\.\\s]+?)\\s*(uygulamasini|programini|app)?\\s*ac$", "max_words": 4 },
+      "capture": { "1": { "into_step": 0, "arg": "app_name" } },
+      "steps": [ { "tool": "open_app", "args": {} } ],
+      "error_handling": "route_to_ai"
+    }
+  ]
+}

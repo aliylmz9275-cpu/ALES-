@@ -1,0 +1,8 @@
+node_modules/
+**/node_modules/
+release/
+backend-dist/
+build/
+*.exe
+*.pkg
+*.dll
