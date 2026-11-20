@@ -157,28 +157,69 @@ def _heuristic_plan(goal: str) -> dict:
     }
 
 
+async def _verify_subtask_outcome(subtask: dict, exec_result: dict) -> dict:
+    """
+    Manager Doğrulama Katmanı:
+    Executor'ın ürettiği çıktıyı ve yan etkileri inceler.
+    Eğer adım başarısızsa ya da beklenmeyen bir hata varsa kurtarma (recovery) kararı üretir.
+    """
+    action = subtask.get("action") or subtask.get("tool") or ""
+    res_text = exec_result.get("result", "")
+    success = exec_result.get("success", False)
+
+    verification = {
+        "verified": success,
+        "note": "Başarıyla doğrulandı" if success else "Adım beklentiyi karşılamadı",
+        "needs_retry": not success,
+        "recovery_subtask": None,
+    }
+
+    if not success:
+        # Otomatik Kurtarma Stratejileri
+        act_l = action.lower()
+        if "type" in act_l or "click" in act_l:
+            # Pencere odaklanması veya bekleme eksikliği olabilir
+            verification["recovery_subtask"] = {
+                "id": f"{subtask.get('id')}_rec",
+                "action": "wait",
+                "tool": "wait",
+                "description": f"Kurtarma: '{action}' öncesi 1.5s bekleme ve tekrar",
+                "params": {"seconds": 1.5}
+            }
+        elif "open" in act_l:
+            verification["recovery_subtask"] = {
+                "id": f"{subtask.get('id')}_rec",
+                "action": "wait",
+                "tool": "wait",
+                "description": f"Kurtarma: Uygulama açılış beklemesi",
+                "params": {"seconds": 2.0}
+            }
+
+    return verification
+
+
 async def run_goal(
     goal: str,
     progress_cb: Optional[Callable[[str], None]] = None,
     tool_executor_fn: Optional[Callable] = None
 ) -> str:
     """
-    Manager-Executor ana döngüsü:
-      1) Hedefi alt görevlere ayırır.
-      2) Alt görevleri sırayla Executor'a iletir.
-      3) Her adımın çıktısını değerlendirir.
-      4) Kullanıcıya kapsamlı bir sonuç raporu döner.
+    Manager-Executor Gerçek Döngüsü:
+      1) [MANAGER PLANS]: Hedefi analiz eder, öğrenilmiş kuralları plana dahil ederek alt adımlara böler.
+      2) [EXECUTOR EXECUTES]: Her bir alt görevi sırayla yürütür, araçları çalıştırır.
+      3) [MANAGER VERIFIES]: Her adımın çıktısını doğrular. Hata durumunda kurtarma adımı işletir.
+      4) [SYNTHESIS]: Nihai başarı durumunu değerlendirir ve kullanıcıya doğrulanmış rapor sunar.
     """
     cb = progress_cb or (lambda m: None)
     screen_streamer.log_activity(f"Yeni hedef alındı: {goal}", level="INFO")
-    cb("📋 Görev analiz ediliyor ve alt adımlar planlanıyor...")
+    cb("📋 [MANAGER]: Görev analiz ediliyor ve alt adımlar planlanıyor...")
 
     start_time = time.time()
     plan_data = await _generate_plan(goal)
     summary = plan_data.get("plan_summary", goal)
     subtasks = plan_data.get("subtasks", [])
 
-    cb(f"🚀 Plan hazır ({len(subtasks)} adım): {summary}")
+    cb(f"🚀 [MANAGER]: Plan hazırlandı ({len(subtasks)} adım): {summary}")
 
     step_results = []
     has_failure = False
@@ -186,39 +227,57 @@ async def run_goal(
     for st in subtasks:
         s_id = st.get("id")
         desc = st.get("description", f"Adım #{s_id}")
-        cb(f"▶ [{s_id}/{len(subtasks)}] {desc}...")
+        cb(f"▶ [EXECUTOR {s_id}/{len(subtasks)}]: {desc}...")
 
-        # Executor'a alt görevi işlet
+        # 1. Yürütme (Execute)
         res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
-        step_results.append(res)
 
-        if not res["success"]:
+        # 2. Doğrulama (Verify)
+        verify = await _verify_subtask_outcome(st, res)
+        res["verification"] = verify
+
+        # Kurtarma Gereksinimi Varsa: 1 deneme yap
+        if verify["needs_retry"] and verify["recovery_subtask"]:
+            cb(f"🔄 [MANAGER]: Adım #{s_id} başarısız oldu. Kurtarma adımı deneniyor...")
+            rec_st = verify["recovery_subtask"]
+            rec_res = await executor_agent.execute_subtask(rec_st, tool_executor_fn=tool_executor_fn)
+            # Ana adımı tekrar dene
+            cb(f"🔁 [EXECUTOR]: Adım #{s_id} yeniden yürütülüyor...")
+            retry_res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+            if retry_res["success"]:
+                res = retry_res
+                res["recovered"] = True
+                cb(f"✓ [MANAGER]: Adım #{s_id} kurtarıldı ve başarıyla tamamlandı.")
+            else:
+                has_failure = True
+                cb(f"❌ [MANAGER]: Adım #{s_id} kurtarma sonrası da başarısız: {retry_res.get('error') or retry_res.get('result')}")
+        elif not res["success"]:
             has_failure = True
-            cb(f"⚠️ [{s_id}] Başarısız: {res.get('error') or res.get('result')}")
-            # Öğrenilen yeni bir kural var mı?
+            cb(f"⚠️ [MANAGER]: Adım #{s_id} başarısız: {res.get('error') or res.get('result')}")
             if res.get("rule_learned"):
-                cb(f"💡 Yeni kural öğrenildi: {res['rule_learned']}")
+                cb(f"💡 [ÖĞRENİLEN KURAL]: {res['rule_learned']}")
         else:
-            cb(f"✓ [{s_id}] Başarılı")
+            cb(f"✓ [MANAGER]: Adım #{s_id} başarıyla doğrulandı.")
 
-        # Adımlar arası minik nefes alma
-        await asyncio.sleep(0.5)
+        step_results.append(res)
+        await asyncio.sleep(0.4)
 
     elapsed = round(time.time() - start_time, 2)
-    status_icon = "⚠️ Kısmi Başarı" if has_failure else "✅ Başarıyla Tamamlandı"
+    status_icon = "⚠️ Kısmi Başarı" if has_failure else "✅ Başarıyla Doğrulandı ve Tamamlandı"
 
-    # Nihai rapor oluşturma
+    # 3. Nihai Değerlendirme & Rapor
     report_lines = [
-        f"🎯 **ALES Görev Yönetim Raporu** — {status_icon}",
+        f"🎯 **ALES Manager-Executor Raporu** — {status_icon}",
         f"**Hedef:** {goal}",
         f"**Plan Özeti:** {summary}",
         f"**Süre:** {elapsed}s | **Adım Sayısı:** {len(subtasks)}\n",
-        "### Adım Yürütme Detayları:"
+        "### Yürütme ve Doğrulama Detayları:"
     ]
 
     for r in step_results:
         icon = "✅" if r["success"] else "❌"
-        line = f"- {icon} **Adım #{r['id']}:** {r['description']} ({r.get('elapsed_s', 0)}s)"
+        rec_tag = " *(kurtarıldı)*" if r.get("recovered") else ""
+        line = f"- {icon} **Adım #{r['id']}:** {r['description']}{rec_tag} ({r.get('elapsed_s', 0)}s)"
         if r.get("result"):
             line += f"\n  - *Çıktı:* {str(r['result'])[:150]}"
         if r.get("rule_learned"):

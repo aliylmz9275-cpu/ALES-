@@ -100,41 +100,37 @@ def _capture_screen_jpeg_base64() -> Optional[str]:
 
 
 async def _screen_capture_loop():
-    """Yalnızca aktif görevler varken çalışan ekran yakalama döngüsü (~2 FPS)."""
+    """Bağlı istemci varken ekranı yakalayıp yayınlayan döngü (aktifken 2 FPS, boştayken 1 FPS)."""
     print("[SCREEN_STREAMER] Ekran yayını BAŞLATILDI.")
     try:
-        while len(_active_tasks) > 0 and len(_clients) > 0:
+        while len(_clients) > 0:
             frame_b64 = await asyncio.to_thread(_capture_screen_jpeg_base64)
+            is_active = len(_active_tasks) > 0
             if frame_b64:
                 msg = {
                     "type": "frame",
+                    "status": "active" if is_active else "idle",
                     "image": frame_b64,
                     "active_tasks": list(_active_tasks),
                     "time": datetime.now().strftime("%H:%M:%S"),
                 }
                 await _broadcast(msg)
-            # 2 FPS = 500ms
-            await asyncio.sleep(0.5)
+            # Aktif görev varken 2 FPS (500ms), boştayken 1 FPS (1000ms)
+            interval = 0.5 if is_active else 1.0
+            await asyncio.sleep(interval)
     except asyncio.CancelledError:
         pass
     except Exception as e:
         print(f"[SCREEN_STREAMER] Yakalama döngüsü istisnası: {e}")
     finally:
-        print("[SCREEN_STREAMER] Ekran yayını DURDURULDU (Boşta).")
-        idle_msg = {
-            "type": "idle",
-            "message": "ALES şu anda boşta. Aktif bir görev başladığında ekran yayını açılacaktır.",
-            "active_tasks": [],
-            "time": datetime.now().strftime("%H:%M:%S"),
-        }
-        await _broadcast(idle_msg)
+        print("[SCREEN_STREAMER] Ekran yayını DURDURULDU (İstemci yok).")
 
 
 async def _check_capture_state():
-    """Aktif görev ve bağlı istemci durumuna göre döngüyü açar veya kapatır."""
+    """Bağlı istemci durumuna göre döngüyü açar veya kapatır."""
     global _capture_task
     async with _lock:
-        should_run = (len(_active_tasks) > 0) and (len(_clients) > 0)
+        should_run = len(_clients) > 0
         if should_run:
             if _capture_task is None or _capture_task.done():
                 _capture_task = asyncio.create_task(_screen_capture_loop())

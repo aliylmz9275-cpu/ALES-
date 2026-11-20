@@ -649,6 +649,7 @@ TOOLS = [
 
     # Multi-Agent Tartisma
     {"type":"function","function":{"name":"multi_agent_discuss","description":"4 farkli AI (Groq+Gemini+SambaNova+Cerebras) paralel calisir, konu hakkinda tartisir ve ortak bir sonuc uretir. 'derin analiz', '4 AI ne dusunur', 'tartis', 'farkli perspektifler' gibi isteklerde kullan.","parameters":{"type":"object","properties":{"topic":{"type":"string","description":"Tartisma konusu veya soru"}},"required":["topic"]}}},
+    {"type":"function","function":{"name":"manage_goal","description":"Karmaşık ve çok adımlı görevleri Manager-Executor mimarisiyle alt adımlara böler, öğrenilen deneyim kurallarını uygular, her adımı yürütüp doğrular ve sonuç raporlar. 'şunu adım adım yap', 'görevi planla ve yürüt' gibi hedeflerde kullan.","parameters":{"type":"object","properties":{"goal":{"type":"string","description":"Yürütülecek hedef veya görev"}},"required":["goal"]}}},
     # Persona
     {"type":"function","function":{"name":"set_persona","description":"ALES modunu değiştir: default/is/ogrenme/dinlenme/gece/siparis/gorev","parameters":{"type":"object","properties":{"persona_key":{"type":"string","enum":["default","is","ogrenme","dinlenme","gece","siparis","gorev"]}},"required":["persona_key"]}}},
     {"type":"function","function":{"name":"list_personas","description":"Kullanılabilir modları listele","parameters":{"type":"object","properties":{},"required":[]}}},
@@ -985,6 +986,20 @@ async def _openclaw_tool_async(name: str, args: dict, progress_cb=None) -> str:
     return f"[{name} · {src}]\n{str(payload)[:3000]}"
 
 
+def _run_manager_goal_sync(goal: str, progress_cb=None) -> str:
+    """Manager-Executor döngüsünü senkron araç ortamından güvenle çalıştırır."""
+    import manager_agent
+    import asyncio
+    async def _async_run():
+        return await manager_agent.run_goal(goal, progress_cb, tool_executor_fn=execute_tool)
+    try:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(lambda: asyncio.run(_async_run())).result()
+    except Exception as e:
+        return f"❌ Manager-Executor hatası: {e}"
+
+
 def execute_tool(name: str, args: dict, progress_cb=None) -> str:
     """
     progress_cb: (str) -> None - bazi araclar (ozellikle Fiverr/Bionluk
@@ -999,6 +1014,8 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "type_text": lambda: type_text(args["text"]),
             "press_key": lambda: press_key(args["key"]),
             "click_at": lambda: click_at(args["x"], args["y"]),
+            "wait": lambda: (time.sleep(float(args.get("seconds", 2.0))) or f"✅ {args.get('seconds', 2.0)}s beklendi"),
+            "sleep": lambda: (time.sleep(float(args.get("seconds", 2.0))) or f"✅ {args.get('seconds', 2.0)}s beklendi"),
             "get_system_info": lambda: get_system_info(),
             # ── Windows masaustu (ad tabanli, koordinat degil) ───────
             "list_windows": lambda: _nd("list_windows_text",
@@ -1075,7 +1092,7 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "list_personas": lambda: list_personas(),
             # Multi-Agent / Manager-Executor
             "multi_agent_discuss": lambda: run_discussion_sync(args["topic"], progress_cb),
-            "manage_goal": lambda: run_discussion_sync(args.get("goal") or args.get("topic") or "", progress_cb),
+            "manage_goal": lambda: _run_manager_goal_sync(args.get("goal") or args.get("topic") or "", progress_cb),
             # Skills (takilabilir yetenekler - Claude'daki skill mantigi)
             "list_installed_skills": lambda: skills_engine.list_skills_text(),
             # Connectors (harici servisler)
@@ -4821,6 +4838,13 @@ async def diag_chain_endpoint(mode: str = None):
         lubv = get_system_prompt()
         if lubv:
             system = lubv + "\n\n" + system
+        try:
+            import experience_learner
+            _lr = experience_learner.get_rules_prompt()
+            if _lr:
+                system += "\n" + _lr
+        except Exception:
+            pass
 
         all_tools = get_all_tools()
         probe_q = "Google'da 'NVIDIA hisse fiyati' diye ara ve bulduklarini soyle."

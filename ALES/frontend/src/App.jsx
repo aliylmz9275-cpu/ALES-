@@ -617,7 +617,7 @@ export default function App() {
             if (msg.activities) setStreamActivities(msg.activities)
           } else if (msg.type === 'frame') {
             setStreamFrame(msg.image)
-            setStreamActive(true)
+            setStreamActive(msg.status === 'active' || (msg.active_tasks && msg.active_tasks.length > 0))
             if (msg.active_tasks) setStreamTasks(msg.active_tasks)
           } else if (msg.type === 'idle') {
             setStreamActive(false)
@@ -1802,18 +1802,25 @@ export default function App() {
             {/* Screen Frame Display (Left 60%) */}
             <div style={{flex:'3 1 450px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:16,display:'flex',flexDirection:'column'}}>
               <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1.5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-                <span>EKRAN AKIŞI (800px / 2 FPS)</span>
-                <span style={{fontSize:12,color:'#A1A1AA'}}>{streamActive ? 'Görev yürütülüyor' : 'Yayın duraklatıldı'}</span>
+                <span>EKRAN AKIŞI (800px / {streamActive ? '2 FPS' : '1 FPS'})</span>
+                <span style={{fontSize:12,color:streamActive ? '#4ade80' : '#A1A1AA'}}>{streamActive ? 'Görev yürütülüyor' : 'Canlı önizleme (Boşta)'}</span>
               </div>
-              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#121212',borderRadius:8,border:'1px solid rgba(255,255,255,0.08)',overflow:'hidden',minHeight:360}}>
-                {streamActive && streamFrame ? (
-                  <img src={streamFrame} alt="Live Stream" style={{width:'100%',height:'auto',maxHeight:'100%',objectFit:'contain',display:'block'}} />
+              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#121212',borderRadius:8,border:'1px solid rgba(255,255,255,0.08)',overflow:'hidden',minHeight:360,position:'relative'}}>
+                {streamFrame ? (
+                  <div style={{position:'relative',width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <img src={streamFrame} alt="Live Stream" style={{width:'100%',height:'auto',maxHeight:'100%',objectFit:'contain',display:'block'}} />
+                    {!streamActive && (
+                      <div style={{position:'absolute',top:10,left:10,background:'rgba(0,0,0,0.75)',border:'1px solid rgba(255,255,255,0.2)',padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,fontFamily:'monospace',color:'#A1A1AA',backdropFilter:'blur(4px)'}}>
+                        CANLI ÖNİZLEME (BOŞTA)
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{textAlign:'center',padding:30}}>
                     <div style={{fontSize:38,marginBottom:12}}>🖥️</div>
-                    <div style={{fontSize:15,fontWeight:600,color:'#ffffff',marginBottom:6}}>ALES Şu Anda Boşta</div>
+                    <div style={{fontSize:15,fontWeight:600,color:'#ffffff',marginBottom:6}}>Ekran Akışı Bekleniyor...</div>
                     <div style={{fontSize:13,color:'#A1A1AA',maxWidth:380,margin:'0 auto'}}>
-                      Masaüstü veya tarayıcı görevi başladığında ekran yayını otomatik olarak burada canlı olarak görüntülenecektir.
+                      Görüntü akışı başlatılıyor. Ekranınız canlı olarak burada görüntülenecektir.
                     </div>
                   </div>
                 )}
