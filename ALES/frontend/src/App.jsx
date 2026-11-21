@@ -1289,11 +1289,11 @@ export default function App() {
         </div>}
         <div style={{display:'flex',alignItems:'center',gap:8,WebkitAppRegion:'no-drag'}}>
           {speaking && <span style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(255,255,255,0.2)',color:'#ffffff',fontFamily:'monospace',animation:'pulse 1s infinite'}}>SES</span>}
-          {skillProposals>0 && <span title="Onay bekleyen beceri önerisi" onClick={()=>setShowSettings(true)} style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(255,255,255,0.16)',color:'#ffffff',fontFamily:'monospace',cursor:'pointer'}}>{skillProposals} BECERİ</span>}
+          {skillProposals>0 && <span title="Onay bekleyen beceri önerisi" onClick={()=>setTab('settings')} style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(255,255,255,0.16)',color:'#ffffff',fontFamily:'monospace',cursor:'pointer'}}>{skillProposals} BECERİ</span>}
           {approvals.length>0 && <span style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:'rgba(200,200,200,0.3)',color:'#ffffff',fontFamily:'monospace',animation:'pulse 1s infinite'}}>{approvals.length} ONAY</span>}
           <div style={{width:8,height:8,borderRadius:'50%',background:connected?'#4ade80':'#666666',boxShadow:connected?'0 0 6px #4ade80':'none'}} />
           <div style={{display:'flex',gap:6}}>
-            <button style={{width:28,height:28,borderRadius:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',color:'#ffffff',fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setShowSettings(s=>!s)} title="Ayarlar">⚙</button>
+            <button style={{width:28,height:28,borderRadius:6,background:tab==='settings'?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',color:'#ffffff',fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setTab(t=>t==='settings'?'chat':'settings')} title="Ayarlar">⚙</button>
             {isElectron && [{i:'⊡',a:()=>window.ales?.toggleFloat?.()},{i:'─',a:()=>window.ales?.minimize?.()},{i:'✕',a:()=>window.ales?.close?.(),r:true}].map((b,idx)=>(
               <button key={idx} style={{width:28,height:28,borderRadius:6,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.18)',color:b.r?'#ff6b6b':'#ffffff',fontSize:13,cursor:'pointer'}} onClick={b.a}>{b.i}</button>
             ))}
@@ -1301,7 +1301,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* SETTINGS */}
+      {/* SETTINGS MODAL (IF OPENED DIRECTLY) */}
       {showSettings && <SettingsPanel onClose={()=>setShowSettings(false)} pendingSkills={skillProposals} onSkillsChange={setSkillProposals} autoSpeak={autoSpeak} onAutoSpeakChange={setAutoSpeak} />}
 
       {/* ONBOARDING MODAL (TASK 4) */}
@@ -1344,6 +1344,7 @@ export default function App() {
           {id:'memory',label:'HAFIZA'},
           {id:'stats',label:'PANO'},
           {id:'status',label:'DURUM'},
+          {id:'settings',label:'AYARLAR'},
           {id:'advanced',label:'GELİŞMİŞ'},
         ].map(t=>(
           <button key={t.id} className="app-tab-btn" style={{padding:'6px 12px',border:tab===t.id?'1px solid rgba(255,255,255,0.45)':'1px solid transparent',background:tab===t.id?'rgba(255,255,255,0.18)':'transparent',color:tab===t.id?'#ffffff':'#A1A1AA',fontFamily:'monospace',fontSize:12,fontWeight:tab===t.id?700:500,letterSpacing:1,cursor:'pointer',borderRadius:6,flexShrink:0,transition:'all .15s'}} onClick={()=>setTab(t.id)}>
@@ -1681,7 +1682,7 @@ export default function App() {
 
           {/* ── Bekleyen beceri onerileri (skills_autogrowth) ── */}
           {(sysStatus?.skill_proposals > 0 || skillProposals > 0) && (
-            <button onClick={()=>setShowSettings(true)}
+            <button onClick={()=>setTab('settings')}
               style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',textAlign:'left',
                 background:'#1E1E24',border:'1px solid rgba(255,255,255,0.3)',
                 borderRadius:8,cursor:'pointer',fontFamily:'monospace'}}>
@@ -2019,6 +2020,11 @@ export default function App() {
         </div>}
 
         {tab==='status' && <StatusPanel />}
+        {tab==='settings' && (
+          <div style={{height:'100%',overflowY:'auto',padding:'16px 20px',background:'#121212',color:'#E4E4E7'}}>
+            <SettingsPanel isTab={true} onClose={()=>setTab('chat')} pendingSkills={skillProposals} onSkillsChange={setSkillProposals} autoSpeak={autoSpeak} onAutoSpeakChange={setAutoSpeak} />
+          </div>
+        )}
         {tab==='advanced' && (
           <div style={{height:'100%',overflowY:'auto',padding:'12px 14px'}}>
             <AdvancedPanel defaultOpen={true} />
@@ -2409,21 +2415,30 @@ function StatusPanel() {
   )
 }
 
-function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, onAutoSpeakChange }) {
+function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, onAutoSpeakChange, isTab = false }) {
   const [keys, setKeys] = useState({ groq:'', cerebras:'', elevenlabs:'', elevenlabs_voice: VOICE_OPTIONS[0].id, edge_voice: 'tr-TR-AhmetNeural', gemini:'', sambanova:'', openrouter:'', nvidia:'' })
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
   const [cloudStatus, setCloudStatus] = useState(null)
+  const [serverCfg, setServerCfg] = useState(null)
 
   useEffect(() => {
-    if (isCloud) {
-      authFetch(API_URL+'/status').then(r=>r.json()).then(setCloudStatus).catch(()=>{})
-      return
-    }
+    authFetch(API_URL+'/config').then(r=>r.json()).then(cfg=>{
+      if (cfg) {
+        setServerCfg(cfg)
+        if (cfg.elevenlabs_voice) setKeys(p=>({...p, elevenlabs_voice: cfg.elevenlabs_voice}))
+        if (cfg.edge_voice) setKeys(p=>({...p, edge_voice: cfg.edge_voice}))
+      }
+    }).catch(()=>{})
+
     authFetch(API_URL+'/voices').then(r=>r.json()).then(d=>{
       if (d?.current) setKeys(p=>({...p, elevenlabs_voice: d.current}))
       if (d?.current_edge_voice) setKeys(p=>({...p, edge_voice: d.current_edge_voice}))
     }).catch(()=>{})
+
+    if (isCloud) {
+      authFetch(API_URL+'/status').then(r=>r.json()).then(setCloudStatus).catch(()=>{})
+    }
   }, [])
 
   const save = async () => {
@@ -2439,8 +2454,20 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     if (keys.edge_voice) data.edge_voice = keys.edge_voice
 
     if (isElectron) { try { await window.ales.saveConfig(data) } catch(e) {} }
-    try { await authFetch(API_URL+'/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}) } catch(e) {}
-    setSaved(true); setTimeout(()=>{setSaved(false);onClose()},1200)
+    try {
+      await authFetch(API_URL+'/config', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(data)
+      })
+      authFetch(API_URL+'/config').then(r=>r.json()).then(setServerCfg).catch(()=>{})
+      if (isCloud) authFetch(API_URL+'/status').then(r=>r.json()).then(setCloudStatus).catch(()=>{})
+    } catch(e) {}
+    setSaved(true)
+    setTimeout(()=>{
+      setSaved(false)
+      if (onClose && !isTab) onClose()
+    }, 1200)
   }
 
   const logoutCloud = () => {
@@ -2465,43 +2492,56 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
 
   const iStyle = {background:'#1E1E24',border:'1px solid rgba(255,255,255,0.22)',borderRadius:8,padding:'10px 12px',color:'#E4E4E7',fontSize:14,fontFamily:'monospace',outline:'none',width:'100%',boxSizing:'border-box'}
 
-  // ─── CLOUD MOD: key'ler Railway/Render env degiskenlerinden geliyor,
-  // bu ekrandan DUZENLENEMEZ - sadece durumu gosteriyoruz + cikis butonu.
-  if (isCloud) {
-    const providers = [
-      {k:'has_groq',n:'Groq'},{k:'has_cerebras',n:'Cerebras'},{k:'has_gemini',n:'Gemini'},
-      {k:'has_sambanova',n:'SambaNova'},{k:'has_openrouter',n:'OpenRouter'},{k:'has_nvidia',n:'NVIDIA'},
-    ]
-    return (
-      <div className="settings-modal-content" style={{background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'18px 20px',flexShrink:0,zIndex:9,maxHeight:'85vh',overflowY:'auto',color:'#E4E4E7'}}>
-        <ModeSelector />
-        <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>CLOUD DURUMU</div>
-        <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',marginBottom:12,lineHeight:1.6}}>
-          Bu, ALES'in telefon/tarayıcı sürümü. API key'ler burada değil, sunucunun
-          ortam değişkenlerinde (Railway/Render paneli) yönetilir.
-        </div>
-        <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:10,marginBottom:14}}>
-          {providers.map(p=>(
-            <div key={p.k} style={{...iStyle,display:'flex',alignItems:'center',gap:10}}>
-              <div style={{width:8,height:8,borderRadius:'50%',background:cloudStatus?.[p.k]?'#4ade80':'#666666'}} />
-              {p.n}
-            </div>
-          ))}
-        </div>
-        <button style={{width:'100%',padding:'11px',background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace'}} onClick={logoutCloud}>ERİŞİM KODUNU DEĞİŞTİR / ÇIKIŞ</button>
-        <SkillsConnectorsPanel />
-        <AdvancedPanel pendingSkills={pendingSkills} onSkillsChange={onSkillsChange} />
-      </div>
-    )
-  }
-
   return (
-    <div className="settings-modal-content" style={{background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.15)',padding:'18px 20px',flexShrink:0,zIndex:9,maxHeight:'85vh',overflowY:'auto',color:'#E4E4E7'}}>
+    <div className="settings-modal-content" style={{background:'#121212',borderBottom: isTab ? 'none' : '1px solid rgba(255,255,255,0.15)',padding: isTab ? '10px 0 30px' : '18px 20px',flexShrink:0,zIndex:9,maxHeight: isTab ? 'none' : '85vh',overflowY:'auto',color:'#E4E4E7'}}>
+      {isCloud && (
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,padding:'14px 16px',marginBottom:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
+            <div style={{fontSize:14,fontWeight:700,color:'#4ade80',fontFamily:'monospace',letterSpacing:1}}>🌐 CLOUD MODU AKTİF</div>
+            <button style={{padding:'6px 12px',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:6,color:'#ffffff',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'monospace'}} onClick={logoutCloud}>
+              ERİŞİM KODUNU DEĞİŞTİR / ÇIKIŞ
+            </button>
+          </div>
+          <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',marginBottom:10,lineHeight:1.5}}>
+            Girdiğiniz API anahtarları sunucu oturumuna kaydedilir. Kalıcı kullanım için Render/Railway ortam değişkenlerinden de tanımlayabilirsiniz.
+          </div>
+          <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',gap:8}}>
+            {[
+              {k:'has_groq',n:'Groq'},{k:'has_cerebras',n:'Cerebras'},{k:'has_gemini',n:'Gemini'},
+              {k:'has_sambanova',n:'SambaNova'},{k:'has_openrouter',n:'OpenRouter'},{k:'has_nvidia',n:'NVIDIA'},
+            ].map(p=>(
+              <div key={p.k} style={{background:'#121212',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'6px 10px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#ffffff',fontFamily:'monospace'}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:(cloudStatus?.[p.k] || serverCfg?.[p.k])?'#4ade80':'#666666'}} />
+                {p.n}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <ModeSelector />
       <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>API AYARLARI</div>
       <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10,marginBottom:14}}>
-        {[{k:'groq',p:'Groq Key (gsk_...)'},{k:'cerebras',p:'Cerebras Key (csk_...)'},{k:'elevenlabs',p:'ElevenLabs Key (sk_...)'},{k:'gemini',p:'Gemini Key (AIza... / AQ....)'},{k:'sambanova',p:'SambaNova Key (sk_-)'},{k:'openrouter',p:'OpenRouter Key (sk-or-...)'},{k:'nvidia',p:'NVIDIA NIM Key (nvapi-...)'}].map(f=>(
-          <input key={f.k} style={iStyle} type="password" placeholder={f.p} value={keys[f.k]} onChange={e=>setKeys(p=>({...p,[f.k]:e.target.value}))} />
+        {[
+          {k:'groq',h:'has_groq',p:'Groq Key (gsk_...)'},
+          {k:'cerebras',h:'has_cerebras',p:'Cerebras Key (csk_...)'},
+          {k:'elevenlabs',h:'has_elevenlabs',p:'ElevenLabs Key (sk_...)'},
+          {k:'gemini',h:'has_gemini',p:'Gemini Key (AIza... / AQ....)'},
+          {k:'sambanova',h:'has_sambanova',p:'SambaNova Key (sk_-)'},
+          {k:'openrouter',h:'has_openrouter',p:'OpenRouter Key (sk-or-...)'},
+          {k:'nvidia',h:'has_nvidia',p:'NVIDIA NIM Key (nvapi-...)'}
+        ].map(f=>(
+          <div key={f.k} style={{position:'relative',display:'flex',flexDirection:'column'}}>
+            <input
+              style={iStyle}
+              type="password"
+              placeholder={serverCfg?.[f.h] ? `${f.p} (Mevcut: Ayarlandı)` : f.p}
+              value={keys[f.k]}
+              onChange={e=>setKeys(p=>({...p,[f.k]:e.target.value}))}
+            />
+            {serverCfg?.[f.h] && (
+              <span style={{fontSize:11,color:'#4ade80',marginTop:3,fontFamily:'monospace'}}>✓ Sunucuda tanımlı</span>
+            )}
+          </div>
         ))}
       </div>
       <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
@@ -2547,7 +2587,11 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
       </div>
       <div style={{display:'flex',gap:8}}>
         <button style={{flex:1,padding:'11px',background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontWeight:'bold',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={save}>{saved?'✓ KAYDEDİLDİ':'KAYDET'}</button>
-        <button style={{flex:1,padding:'11px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontWeight:'600',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={onClose}>İPTAL</button>
+        {onClose && (
+          <button style={{flex:1,padding:'11px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontWeight:'600',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={onClose}>
+            {isTab ? 'SOHBETE DÖN' : 'İPTAL'}
+          </button>
+        )}
       </div>
       <SystemPromptPanel />
       <VaultPanel />

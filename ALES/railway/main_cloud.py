@@ -49,10 +49,17 @@ import conversations as conv_store  # noqa: E402
 
 # ─── AYARLAR ───────────────────────────────────────────────────────
 ACCESS_KEY = os.environ.get("ALES_ACCESS_KEY", "").strip()
-HAS_ANY_KEY = any(os.environ.get(k) for k in (
-    "GROQ_API_KEY", "CEREBRAS_API_KEY", "GEMINI_API_KEY",
-    "SAMBANOVA_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY",
-))
+
+def has_any_api_key() -> bool:
+    import config_manager as cm
+    return any(bool(cm.get_key(k) or os.environ.get(env)) for k, env in (
+        ("groq_key", "GROQ_API_KEY"),
+        ("cerebras_key", "CEREBRAS_API_KEY"),
+        ("gemini_key", "GEMINI_API_KEY"),
+        ("sambanova_key", "SAMBANOVA_API_KEY"),
+        ("openrouter_key", "OPENROUTER_API_KEY"),
+        ("nvidia_key", "NVIDIA_API_KEY"),
+    ))
 
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"  # multi-stage Dockerfile burayi doldurur
 
@@ -159,8 +166,8 @@ async def ws_endpoint(websocket: WebSocket):
             conv_store.append_message(conv_id, "user", text)
             history = conv_store.get_history_for_model(conv_id, limit=20)
 
-            if not HAS_ANY_KEY:
-                await websocket.send_json({"type": "error", "content": "❌ Sunucuda hic AI API key tanimli degil (Railway/Render ortam degiskenlerini kontrol et)."})
+            if not has_any_api_key():
+                await websocket.send_json({"type": "error", "content": "❌ Sunucuda hic AI API key tanimli degil (Ayarlar sekmesinden veya Render ortam degiskenlerinden ekleyin)."})
                 continue
 
             if re.search(r"derin analiz|tartis|4 ?ai", text, re.IGNORECASE):
@@ -179,32 +186,213 @@ async def ws_endpoint(websocket: WebSocket):
 # ─── HTTP: DURUM / SAGLIK KONTROLU (auth YOK - platform healthcheck icin) ──
 @app.get("/status")
 async def status():
+    import config_manager as cm
     return {
         "status": "online",
         "mode": "cloud",
-        "has_groq": bool(os.environ.get("GROQ_API_KEY")),
-        "has_cerebras": bool(os.environ.get("CEREBRAS_API_KEY")),
-        "has_gemini": bool(os.environ.get("GEMINI_API_KEY")),
-        "has_sambanova": bool(os.environ.get("SAMBANOVA_API_KEY")),
-        "has_openrouter": bool(os.environ.get("OPENROUTER_API_KEY")),
-        "has_nvidia": bool(os.environ.get("NVIDIA_API_KEY")),
+        "has_groq": bool(cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
+        "has_cerebras": bool(cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
+        "has_gemini": bool(cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
+        "has_sambanova": bool(cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
+        "has_openrouter": bool(cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
+        "has_nvidia": bool(cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
         "auth_enabled": bool(ACCESS_KEY),
         "time": datetime.now().isoformat(),
     }
 
-# ─── HTTP: KONFIGURASYON (SADECE OKUMA - key'ler env'den, degistirilemez) ──
+# ─── HTTP: KONFİGÜRASYON (GET /config & POST /config) ─────────────
 @app.get("/config")
 async def get_config(x_ales_key: str = Header(default="")):
     if not _key_ok(x_ales_key):
         raise HTTPException(status_code=401)
+    import config_manager as cm
+    cfg = cm.load_config()
+    mode_cfg = cm.get_mode_config()
     return {
-        "has_groq": bool(os.environ.get("GROQ_API_KEY")),
-        "has_cerebras": bool(os.environ.get("CEREBRAS_API_KEY")),
-        "has_elevenlabs": False,
-        "has_openrouter": bool(os.environ.get("OPENROUTER_API_KEY")),
-        "has_nvidia": bool(os.environ.get("NVIDIA_API_KEY")),
-        "cloud_readonly": True,
+        "has_groq": bool(cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
+        "has_cerebras": bool(cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
+        "has_elevenlabs": bool(cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY")),
+        "has_gemini": bool(cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
+        "has_sambanova": bool(cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
+        "has_openrouter": bool(cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
+        "has_nvidia": bool(cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
+        "elevenlabs_voice": cfg.get("elevenlabs_voice") or "eleven_monolingual_v1",
+        "edge_voice": cfg.get("edge_voice") or "tr-TR-AhmetNeural",
+        "mode": cm.get_mode(),
+        "timeouts": mode_cfg.get("timeouts", {}),
+        "cloud_readonly": False,
     }
+
+@app.post("/config")
+async def set_config(data: dict, x_ales_key: str = Header(default="")):
+    if not _key_ok(x_ales_key):
+        raise HTTPException(status_code=401)
+    import config_manager as cm
+    cfg = cm.load_config()
+    
+    env_map = {
+        "groq_key": "GROQ_API_KEY",
+        "cerebras_key": "CEREBRAS_API_KEY",
+        "elevenlabs_key": "ELEVENLABS_API_KEY",
+        "gemini_key": "GEMINI_API_KEY",
+        "sambanova_key": "SAMBANOVA_API_KEY",
+        "openrouter_key": "OPENROUTER_API_KEY",
+        "nvidia_key": "NVIDIA_API_KEY",
+    }
+    
+    for key in ["groq_key", "cerebras_key", "elevenlabs_key", "elevenlabs_voice", "edge_voice",
+                "gemini_key", "sambanova_key", "openrouter_key", "nvidia_key"]:
+        if key in data:
+            val = data[key]
+            if val is not None and str(val).strip() != "":
+                clean_val = str(val).strip()
+                cfg[key] = clean_val
+                if key in env_map:
+                    os.environ[env_map[key]] = clean_val
+            elif data.get(f"clear_{key}") is True or val == "__CLEAR__":
+                cfg[key] = ""
+                if key in env_map and env_map[key] in os.environ:
+                    del os.environ[env_map[key]]
+                    
+    if isinstance(data.get("timeouts"), dict):
+        cur = dict(cfg.get("timeouts") or {})
+        for k, v in data["timeouts"].items():
+            try: cur[k] = float(v)
+            except Exception: pass
+        cfg["timeouts"] = cur
+        
+    cm.save_config(cfg)
+    
+    if data.get("mode"):
+        try:
+            cm.set_mode(data["mode"])
+        except ValueError as e:
+            return {"success": True, "mode_error": str(e)}
+            
+    return {"success": True}
+
+# ─── HTTP: MOD SİSTEMİ (GET /modes & POST /mode) ─────────────────
+@app.get("/modes")
+async def get_modes():
+    import config_manager as cm
+    active = cm.get_mode_config()
+    return {
+        "modes": cm.list_modes(),
+        "active": active["mode"],
+        "active_chain": [{"layer": l["layer"], "provider": l.get("provider"),
+                          "model": l.get("model")} for l in active["chain"]],
+        "providers": ["groq", "cerebras", "gemini", "sambanova", "nvidia", "openrouter"],
+        "timeouts": active.get("timeouts", {}),
+    }
+
+@app.post("/mode")
+async def post_mode(data: dict):
+    import config_manager as cm
+    try:
+        m = cm.set_mode(data.get("mode", ""))
+    except ValueError as e:
+        return {"ok": False, "error": str(e), "modes": [x["id"] for x in cm.list_modes()]}
+    return {"ok": True, "mode": m, "active_chain":
+            [{"layer": l["layer"], "provider": l.get("provider"), "model": l.get("model")}
+             for l in cm.get_mode_config(m)["chain"]]}
+
+# ─── HTTP: MODELLER (GET /models) ─────────────────────────────────
+@app.get("/models")
+async def models_list():
+    import config_manager as cm
+    return {
+        "layers": cm.list_model_layers(),
+        "mode": cm.get_mode(),
+        "heavy_available": cm.heavy_available(),
+        "providers": ["groq", "cerebras", "gemini", "sambanova", "nvidia", "openrouter"],
+        "credential_problems": cm.credential_problems(),
+    }
+
+# ─── HTTP: MECLİS & BIG ALES DESTEKLEYİCİ ROTALAR ──────────────────
+@app.get("/council")
+async def council_get():
+    return {"config": {"enabled": False}, "strategies": []}
+
+@app.get("/big-ales")
+async def big_ales_get():
+    return {"available": False, "session": {"signed_in": False}}
+
+# ─── HTTP: API TEST VE PING KONTROLÜ ──────────────────────────────
+@app.post("/test-key")
+async def test_key_route(data: dict):
+    provider = (data.get("provider") or "groq").lower().strip()
+    key = (data.get("key") or "").strip()
+    if not key:
+        return {"ok": False, "error": "API Key boş olamaz."}
+    try:
+        if provider == "groq":
+            import httpx
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {key}"}
+                )
+                if resp.status_code == 200:
+                    return {"ok": True, "provider": "groq"}
+                else:
+                    return {"ok": False, "error": f"Groq Doğrulama Hatası ({resp.status_code}): {resp.text}"}
+        elif provider == "gemini":
+            from google import genai
+            client = genai.Client(api_key=key)
+            client.models.list()
+            return {"ok": True, "provider": "gemini"}
+        else:
+            return {"ok": False, "error": f"Bilinmeyen sağlayıcı: {provider}"}
+    except Exception as e:
+        return {"ok": False, "error": f"Bağlantı Hatası: {e}"}
+
+# ─── HTTP: SİSTEM VE MODÜL CANLI DURUMU (DURUM PANELİ İÇİN) ───────
+@app.get("/api/system/status")
+async def get_real_system_status():
+    import config_manager as cm
+    cfg = cm.load_config()
+    caps = {}
+
+    active_keys = []
+    for prov, k in (("Groq", "groq_key"), ("Gemini", "gemini_key"), ("Cerebras", "cerebras_key"),
+                    ("NVIDIA", "nvidia_key"), ("OpenRouter", "openrouter_key"), ("SambaNova", "sambanova_key")):
+        if cm.get_key(k) or os.environ.get(f"{prov.upper()}_API_KEY"):
+            active_keys.append(prov)
+    
+    if active_keys:
+        caps["api_models"] = {
+            "status": "working",
+            "label": "Model Sağlayıcıları & API (Cloud)",
+            "details": f"Aktif Anahtarlar: {', '.join(active_keys)} (Bulut Fallback Zinciri Hazır)"
+        }
+    else:
+        caps["api_models"] = {
+            "status": "failed",
+            "label": "Model Sağlayıcıları & API",
+            "details": "Hiçbir API anahtarı tanımlanmamış. ALES yanıt veremez; Ayarlar'dan anahtar ekleyin."
+        }
+
+    caps["cloud_mode"] = {
+        "status": "working",
+        "label": "Cloud / Web / Mobil Motoru",
+        "details": "FastAPI + WebSocket Bulut Sunucusu devrede. Masaüstü/ekran erişimi sadece yerel EXE'de çalışır."
+    }
+
+    try:
+        import manager_agent
+        caps["manager_agent"] = {
+            "status": "working",
+            "label": "Manager-Executor Mimarisi",
+            "details": "Manager Agent devrede, adımlı hedef ve planlama yapabilir."
+        }
+    except Exception as e_ma:
+        caps["manager_agent"] = {
+            "status": "beta",
+            "label": "Manager-Executor Mimarisi",
+            "details": f"Yedek: {e_ma}"
+        }
+
+    return {"ok": True, "capabilities": caps}
 
 # ─── HTTP: SOHBET GECMISI (conversations.py DOGRUDAN reuse) ───────
 @app.get("/conversations")
