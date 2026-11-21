@@ -1,0 +1,35 @@
+# ALES Cloud - Multi-stage Dockerfile for Render / Railway
+# Stage 1: Build React/Vite frontend
+FROM node:20-slim AS frontend-build
+WORKDIR /build
+
+# Copy frontend package manifests and install dependencies
+COPY ALES/frontend/package*.json ./frontend/
+RUN cd frontend && npm install
+
+# Copy frontend source and build (output lands in /build/dist)
+COPY ALES/frontend/ ./frontend/
+RUN cd frontend && npm run build
+
+# Stage 2: Python backend + Static frontend
+FROM python:3.11-slim AS runtime
+WORKDIR /app
+
+# Upgrade pip and install build tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install cloud backend dependencies
+COPY ALES/railway/requirements_cloud.txt ./railway/requirements_cloud.txt
+RUN pip install --no-cache-dir -r railway/requirements_cloud.txt
+
+# Copy backend and cloud modules
+COPY ALES/backend/ ./backend/
+COPY ALES/railway/ ./railway/
+
+# Copy compiled frontend from Stage 1 into /app/dist
+COPY --from=frontend-build /build/dist ./dist
+
+ENV PORT=10000
+EXPOSE 10000
+
+CMD ["python", "railway/main_cloud.py"]

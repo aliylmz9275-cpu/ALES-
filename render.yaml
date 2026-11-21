@@ -8,6 +8,8 @@ services:
     plan: free
     healthCheckPath: /status
     envVars:
+      - key: PORT
+        value: 10000
       - key: ALES_ACCESS_KEY
         sync: false
       - key: GROQ_API_KEY

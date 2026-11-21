@@ -18,6 +18,7 @@ playwright==1.44.0
 pytesseract==0.3.13
 pyperclip==1.9.0
 keyring==25.4.1
+python-multipart>=0.0.9
 
 # ===================================================================
 # OPSIYONEL - HICBIRI ZORUNLU DEGIL

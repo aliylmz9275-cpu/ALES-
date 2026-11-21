@@ -400,20 +400,24 @@ async def get_real_system_status():
 
 @app.post("/api/transcribe")
 @app.post("/transcribe")
-async def transcribe_audio_api(request: Request, file: UploadFile = File(None)):
+async def transcribe_audio_api(request: Request):
     """Ses kaydını metne dönüştürür (Groq Whisper API)."""
     import config_manager as cm
     audio_bytes = None
     filename = "audio.webm"
     content_type = "audio/webm"
 
-    if file is not None:
+    content_type_header = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type_header:
         try:
-            audio_bytes = await file.read()
-            filename = file.filename or "audio.webm"
-            content_type = file.content_type or "audio/webm"
-        except Exception:
-            pass
+            form = await request.form()
+            file = form.get("file")
+            if file and hasattr(file, "read"):
+                audio_bytes = await file.read()
+                filename = getattr(file, "filename", "audio.webm")
+                content_type = getattr(file, "content_type", "audio/webm")
+        except Exception as e:
+            print(f"[TRANSCRIBE] Form okuma hatası: {e}")
 
     if not audio_bytes:
         try:
@@ -509,6 +513,6 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 10000))
     print(f"[ALES CLOUD] Starting server on 0.0.0.0:{port}...")
     uvicorn.run(app, host="0.0.0.0", port=port)

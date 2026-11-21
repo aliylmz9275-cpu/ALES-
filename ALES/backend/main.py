@@ -3401,7 +3401,7 @@ async def memory_long_forget(data: dict = None):
 
 @app.post("/api/transcribe")
 @app.post("/transcribe")
-async def transcribe_audio_api(request: Request, file: UploadFile = File(None)):
+async def transcribe_audio_api(request: Request):
     """
     Ses kaydını metne dönüştürür (Groq Whisper API whisper-large-v3-turbo).
     Web Speech API desteği olmayan ortamlarda (Electron / Mobil) MediaRecorder yedeği.
@@ -3410,13 +3410,17 @@ async def transcribe_audio_api(request: Request, file: UploadFile = File(None)):
     filename = "audio.webm"
     content_type = "audio/webm"
 
-    if file is not None:
+    content_type_header = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type_header:
         try:
-            audio_bytes = await file.read()
-            filename = file.filename or "audio.webm"
-            content_type = file.content_type or "audio/webm"
+            form = await request.form()
+            file = form.get("file")
+            if file and hasattr(file, "read"):
+                audio_bytes = await file.read()
+                filename = getattr(file, "filename", "audio.webm")
+                content_type = getattr(file, "content_type", "audio/webm")
         except Exception as e:
-            print(f"[TRANSCRIBE] Dosya okuma hatası: {e}")
+            print(f"[TRANSCRIBE] Form okuma hatası: {e}")
 
     if not audio_bytes:
         try:
