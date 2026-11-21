@@ -240,7 +240,7 @@ DEFAULT_MODELS = {
     "vision":       {"provider": "gemini",     "model": "gemini-3.8-flash"},
     "code":         {"provider": "openrouter", "model": "qwen/qwen3.8-27b"},
     "unrestricted": {"provider": "nvidia",     "model": "deepseek-ai/deepseek-v4-pro"},
-    "heavy":        {"provider": "openrouter", "model": "moonshotai/kimi-k3"},
+    "heavy":        {"provider": "gemini",     "model": "gemini-2.0-flash"},
 }
 
 # ─── HEAVY-ONLY KATMAN KAPISI ──────────────────────────────────────────

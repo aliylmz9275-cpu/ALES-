@@ -165,6 +165,11 @@ excludes = [
     "pytest", "sphinx", "PyQt5", "PyQt6", "PySide2", "PySide6", "wx",
 ]
 
+if os.path.exists(os.path.join(BACKEND, "skills.json")):
+    datas.append((os.path.join(BACKEND, "skills.json"), "."))
+if os.path.exists(os.path.join(BACKEND, "custom_skills")):
+    datas.append((os.path.join(BACKEND, "custom_skills"), "custom_skills"))
+
 a = Analysis(
     [os.path.join(BACKEND, "main.py")],
     pathex=[BACKEND, ROOT],        # kardes moduller (config_manager vb.)

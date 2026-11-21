@@ -83,15 +83,15 @@ def _capture_screen_jpeg_base64() -> Optional[str]:
         if img is None:
             return None
 
-        # 800px genişliğe oranını koruyarak küçült
+        # 640x360 ölçekleme (Hızlı akış, düşük CPU/ağ yükü)
         w, h = img.size
-        max_w = 800
+        max_w = 640
         if w > max_w:
             new_h = int(h * (max_w / w))
             img = img.resize((max_w, new_h), Image.Resampling.BILINEAR)
 
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=65, optimize=True)
+        img.save(buf, format="JPEG", quality=50, optimize=True)
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
         return f"data:image/jpeg;base64,{b64}"
     except Exception as e:
@@ -115,8 +115,8 @@ async def _screen_capture_loop():
                     "time": datetime.now().strftime("%H:%M:%S"),
                 }
                 await _broadcast(msg)
-            # Aktif görev varken 2 FPS (500ms), boştayken 1 FPS (1000ms)
-            interval = 0.5 if is_active else 1.0
+            # Aktif görev varken ~8 FPS (120ms), boştayken ~4 FPS (250ms)
+            interval = 0.12 if is_active else 0.25
             await asyncio.sleep(interval)
     except asyncio.CancelledError:
         pass

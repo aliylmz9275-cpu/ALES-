@@ -51,10 +51,19 @@
       "error_handling": "route_to_ai"
     },
     {
+      "name": "open_app_en",
+      "platform": "windows",
+      "enabled": true,
+      "match": { "regex": "^(?:open|launch|start)\\s+([a-z0-9\\.\\s_\\-]+?)(?:\\s+app)?$", "max_words": 4 },
+      "capture": { "1": { "into_step": 0, "arg": "app_name" } },
+      "steps": [ { "tool": "open_app", "args": {} } ],
+      "error_handling": "route_to_ai"
+    },
+    {
       "name": "open_app",
       "platform": "windows",
       "enabled": true,
-      "match": { "regex": "^([a-z0-9\\.\\s]+?)\\s*(uygulamasini|programini|app)?\\s*ac$", "max_words": 4 },
+      "match": { "regex": "^([a-z0-9\\.\\s_\\-]+?)\\s*(uygulamasini|programini|app|i|ı|yi|yı)?\\s*(ac|acarmisin|aç|açarmısın|baslat|başlat)$", "max_words": 4 },
       "capture": { "1": { "into_step": 0, "arg": "app_name" } },
       "steps": [ { "tool": "open_app", "args": {} } ],
       "error_handling": "route_to_ai"

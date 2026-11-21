@@ -645,6 +645,9 @@ export default function App() {
   const inputRef = useRef(null)
   const reconnectRef = useRef(null)
   const recRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const mediaStreamRef = useRef(null)
+  const [transcribing, setTranscribing] = useState(false)
   // HUD/ses koordinasyonu:
   // speakingRealRef — backend GERCEK "speaking" olayi gonderiyorsa true olur.
   //   ESKIDEN 'message' olayinda 4 saniyelik bir zamanlayici ile konusma
@@ -764,16 +767,88 @@ export default function App() {
     }
   }, [])
 
+  const stopListening = () => {
+    if (recRef.current) {
+      try { recRef.current.stop() } catch {}
+      recRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try { mediaRecorderRef.current.stop() } catch {}
+    }
+    if (mediaStreamRef.current) {
+      try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
+      mediaStreamRef.current = null
+    }
+    setListening(false)
+  }
+
+  const startMediaRecorderFallback = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Mikrofon erişimi desteklenmiyor.")
+        setListening(false)
+        return
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      const chunks = []
+      const mimeType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : 'audio/mp4'
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
+      mediaRecorderRef.current = recorder
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data)
+        }
+      }
+
+      recorder.onstop = async () => {
+        setListening(false)
+        if (chunks.length === 0) return
+        setTranscribing(true)
+        const blob = new Blob(chunks, { type: mimeType || 'audio/webm' })
+        const formData = new FormData()
+        formData.append('file', blob, 'audio.webm')
+
+        try {
+          const resp = await fetch(`${API_URL}/api/transcribe`, {
+            method: 'POST',
+            headers: isCloud ? { 'X-ALES-Key': getCloudKey() } : {},
+            body: formData
+          })
+          const res = await resp.json()
+          if (res.ok && res.text) {
+            setInput(prev => prev ? (prev + ' ' + res.text) : res.text)
+          } else if (res.error) {
+            console.warn("Transkripsiyon hatası:", res.error)
+          }
+        } catch (err) {
+          console.warn("Transkripsiyon ağı hatası:", err)
+        } finally {
+          setTranscribing(false)
+        }
+      }
+
+      recorder.start()
+      setListening(true)
+    } catch (err) {
+      console.warn("Mikrofon hatası:", err)
+      setListening(false)
+      alert("Mikrofon erişimi reddedildi veya bulunamadı.")
+    }
+  }
+
   const startListening = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) {
-      alert("Mikrofon desteklenmiyor veya internet yok. Lütfen yazılı komut kullanın.")
+      // Web Speech API olmayan ortamlarda (Electron / Mobil) doğrudan MediaRecorder + Groq Whisper
+      startMediaRecorderFallback()
       return
     }
     try {
       const rec = new SR()
       rec.lang = 'tr-TR'
-      rec.continuous = false
+      rec.continuous = true
       rec.interimResults = true
       rec.onresult = e => {
         let transcript = ''
@@ -781,23 +856,23 @@ export default function App() {
           transcript += e.results[i][0].transcript
         }
         setInput(transcript)
-        if (e.results[0].isFinal) {
-          setListening(false)
-        }
       }
       rec.onerror = (err) => {
-        console.warn("STT hatası:", err)
-        setListening(false)
-        alert("Mikrofon desteklenmiyor veya internet yok. Lütfen yazılı komut kullanın.")
+        console.warn("Web Speech API hatası, MediaRecorder yedeğine geçiliyor:", err)
+        try { rec.stop() } catch {}
+        recRef.current = null
+        startMediaRecorderFallback()
       }
-      rec.onend = () => setListening(false)
+      rec.onend = () => {
+        setListening(false)
+        recRef.current = null
+      }
       recRef.current = rec
       rec.start()
       setListening(true)
     } catch (err) {
-      console.warn("STT başlatma hatası:", err)
-      setListening(false)
-      alert("Mikrofon desteklenmiyor veya internet yok. Lütfen yazılı komut kullanın.")
+      console.warn("Web Speech API başlatılamadı, yedeğe geçiliyor:", err)
+      startMediaRecorderFallback()
     }
   }
 
@@ -1804,8 +1879,8 @@ export default function App() {
             {/* Screen Frame Display (Left 60%) */}
             <div style={{flex:'3 1 450px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:16,display:'flex',flexDirection:'column'}}>
               <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1.5,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-                <span>EKRAN AKIŞI (800px / {streamActive ? '2 FPS' : '1 FPS'})</span>
-                <span style={{fontSize:12,color:streamActive ? '#4ade80' : '#A1A1AA'}}>{streamActive ? 'Görev yürütülüyor' : 'Canlı önizleme (Boşta)'}</span>
+                <span>EKRAN AKIŞI (640x360 / {streamActive ? '8 FPS' : '4 FPS'})</span>
+                <span style={{fontSize:12,color:streamActive ? '#4ade80' : '#A1A1AA'}}>{streamActive ? 'Görev yürütülüyor (8 FPS)' : 'Canlı önizleme (Boşta / 4 FPS)'}</span>
               </div>
               <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',background:'#121212',borderRadius:8,border:'1px solid rgba(255,255,255,0.08)',overflow:'hidden',minHeight:360,position:'relative'}}>
                 {streamFrame ? (
@@ -2051,12 +2126,12 @@ export default function App() {
               boxShadow:listening ? '0 0 12px rgba(239,68,68,0.5)' : 'none',
               transition:'all .2s'
             }}
-            title={listening ? "Dinlemeyi Durdur" : "Sesle Yaz (Mikrofon)"}
-            onClick={listening ? () => { recRef.current?.stop(); setListening(false) } : startListening}
+            title={transcribing ? "Ses işleniyor (Whisper)..." : (listening ? "Dinlemeyi Durdur" : "Sesle Yaz (Mikrofon)")}
+            onClick={listening ? stopListening : startListening}
           >
-            🎤
+            {transcribing ? '⏳' : '🎤'}
           </button>
-          <textarea ref={inputRef} className="chat-input" style={{flex:1,background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,padding:'10px 12px',color:'#E4E4E7',fontSize:14,fontFamily:"'Inter',sans-serif",resize:'none',lineHeight:1.5,userSelect:'text',transition:'border-color .2s'}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={showOnboarding ? 'Lütfen önce API anahtarınızı kaydedin...' : (connected?(listening?'Dinleniyor...':"ALES'e yaz..."):'Backend baslatiliyor...')} disabled={!connected||thinking||showOnboarding} rows={1} />
+          <textarea ref={inputRef} className="chat-input" style={{flex:1,background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,padding:'10px 12px',color:'#E4E4E7',fontSize:14,fontFamily:"'Inter',sans-serif",resize:'none',lineHeight:1.5,userSelect:'text',transition:'border-color .2s'}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={showOnboarding ? 'Lütfen önce API anahtarınızı kaydedin...' : (connected?(transcribing?'Ses yazıya çevriliyor...':(listening?'Dinleniyor...':"ALES'e yaz...")):'Backend baslatiliyor...')} disabled={!connected||thinking||showOnboarding} rows={1} />
           <button style={{width:40,height:40,flexShrink:0,background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 0 12px rgba(255,255,255,0.25)',opacity:(!connected||thinking||!input.trim()||showOnboarding)?0.25:1,transition:'opacity .2s'}} onClick={send} disabled={!connected||thinking||!input.trim()||showOnboarding}>▶</button>
         </div>
       </footer>

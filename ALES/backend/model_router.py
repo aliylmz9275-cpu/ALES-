@@ -307,8 +307,18 @@ async def _call_layer(layer: dict, messages: list, timeout: float,
 
     client = get_client(provider)
     if client is None:
-        return {"ok": False, "layer": lname, "provider": provider, "model": model,
-                "error": f"{provider}: key yok", "elapsed": 0.0}
+        # Heavy katmanı için akıllı kurtarma: Eğer Gemini anahtarı yoksa NVIDIA DeepSeek V4 veya Groq ile kurtar
+        if lname == "heavy":
+            for fb_prov, fb_mod in [("nvidia", "deepseek-ai/deepseek-v4"), ("groq", "llama-3.3-70b-versatile")]:
+                fb_client = get_client(fb_prov)
+                if fb_client is not None:
+                    provider = fb_prov
+                    model = fb_mod
+                    client = fb_client
+                    break
+        if client is None:
+            return {"ok": False, "layer": lname, "provider": provider, "model": model,
+                    "error": f"{provider}: key yok", "elapsed": 0.0}
 
     # Cagri oncesi dogrulama (fail-open; yalnizca kara liste engeller).
     original = model
@@ -488,6 +498,8 @@ async def chat_chain(messages: list, mode: str = None, tools: list = None,
     timeouts = mc["timeouts"]
     errors = []
     sorted_chain = _sort_chain_by_latency(mc["chain"])
+    if mc.get("mode") == "heavy":
+        sorted_chain = sorted(sorted_chain, key=lambda l: 0 if l.get("layer") == "heavy" else 1)
     for layer in sorted_chain:
         res = await _call_layer(layer, messages, _layer_timeout(layer["layer"], timeouts),
                                 tools=tools, max_tokens=max_tokens,
@@ -509,6 +521,8 @@ async def race_chain(messages: list, mode: str = None, tools: list = None,
     mc = get_mode_config(mode)
     timeouts = mc["timeouts"]
     layers = mc["chain"]
+    if mc.get("mode") == "heavy":
+        layers = sorted(layers, key=lambda l: 0 if l.get("layer") == "heavy" else 1)
     if not layers:
         raise RouterError(f"[{mc['mode']}] zincir bos")
     tasks = [asyncio.ensure_future(

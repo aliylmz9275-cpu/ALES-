@@ -50,17 +50,28 @@ class OpenClawBridge:
         self.os_type = platform.system()  # 'Windows', 'Darwin', 'Linux'
 
     async def check_daemon(self) -> bool:
-        """OpenClaw yerel servisinin ayakta olup olmadığını kontrol eder."""
+        """OpenClaw yerel servisinin ayakta olup olmadığını kontrol eder (hızlı ve önbellekli)."""
+        now = time.time()
+        # Daemon kapalıysa her çağrıda 2 saniye beklememek için 15s önbellekle
+        if not _stats["daemon_connected"] and (now - _stats["last_check"] < 15.0):
+            return False
+
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=0.5) as client:
                 r = await client.get(f"{self.base_url}/health")
                 ok = (r.status_code == 200)
                 _stats["daemon_connected"] = ok
-                _stats["last_check"] = time.time()
+                _stats["last_check"] = now
+                if ok:
+                    print(f"[OPENCLAW] ✅ Yerel daemon bağlı: {self.base_url}")
                 return ok
         except Exception:
+            if _stats["daemon_connected"]:
+                print(f"[OPENCLAW] ⚠️ Daemon bağlantısı koptu ({self.base_url}). Yerel araçlara devrediliyor.")
+            elif _stats["openclaw_calls"] == 1:
+                print(f"[OPENCLAW] Bilgi: Daemon ({self.base_url}) çevrimdışı. Tüm eylemler yerel araçlarla (native_desktop / playwright) yürütülecek.")
             _stats["daemon_connected"] = False
-            _stats["last_check"] = time.time()
+            _stats["last_check"] = now
             return False
 
     async def control_desktop(self, action: str, params: Dict[str, Any] = None) -> Dict[str, Any]:

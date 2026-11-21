@@ -91,7 +91,7 @@ if _FROZEN_WINDOWED:
 
 import psutil
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 import pyautogui
 pyautogui.FAILSAFE = False
@@ -236,8 +236,19 @@ except Exception as _e:
     cer_module = None
 try:
     import self_evolution
+    try:
+        from custom_skills import load_all_custom_skills
+        _loaded_skills = load_all_custom_skills()
+        if hasattr(self_evolution, "_evolved_skills"):
+            self_evolution._evolved_skills.update(_loaded_skills)
+    except Exception:
+        pass
 except Exception as _e:
     self_evolution = None
+try:
+    import mcp_connector
+except Exception as _e:
+    mcp_connector = None
 try:
     import reflection_agent
 except Exception as _e:
@@ -361,7 +372,19 @@ def open_app(app_name: str) -> str:
             return f"❌ {app_name} acilamadi: {e}"
 
     # Sistem uygulamalari - PATH'te her zaman bulunur, guvenli
-    system_apps = {"notepad": "notepad.exe", "explorer": "explorer.exe", "cmd": "cmd.exe"}
+    system_apps = {
+        "notepad": "notepad.exe",
+        "not defteri": "notepad.exe",
+        "calc": "calc.exe",
+        "calculator": "calc.exe",
+        "hesap makinesi": "calc.exe",
+        "explorer": "explorer.exe",
+        "dosya gezgini": "explorer.exe",
+        "cmd": "cmd.exe",
+        "komut istemi": "cmd.exe",
+        "terminal": "wt.exe",
+        "paint": "mspaint.exe",
+    }
     if key in system_apps:
         try:
             subprocess.Popen(system_apps[key], shell=True)
@@ -1108,9 +1131,30 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
                 args["connector_id"], args["path"], args.get("method", "GET"),
                 args.get("body"), args.get("params")
             ),
+            # Model Context Protocol (MCP)
+            "mcp_list_tools": lambda: json.dumps(mcp_connector.list_mcp_tools() if mcp_connector else [], ensure_ascii=False),
+            "mcp_call_tool": lambda: mcp_connector.call_mcp_tool(args["name"], args.get("arguments", {})) if mcp_connector else "MCP kullanılamıyor",
+            "mcp_read_file": lambda: mcp_connector.mcp_read_file(args["path"]) if mcp_connector else read_file(args["path"]),
+            "mcp_list_directory": lambda: mcp_connector.mcp_list_directory(args.get("path", ".")) if mcp_connector else list_directory(args.get("path", ".")),
         }
         if name in tools:
             return tools[name]()
+
+        # Evrilmiş Beceriler (Darwin-Gödel Self-Evolution)
+        if self_evolution is not None and hasattr(self_evolution, "get_evolved_skills"):
+            try:
+                ev_skills = self_evolution.get_evolved_skills()
+                clean_n = name.replace("skill_", "")
+                target_skill = ev_skills.get(name) or ev_skills.get(clean_n) or ev_skills.get(f"skill_{clean_n}")
+                if target_skill and hasattr(target_skill, "run"):
+                    import inspect
+                    sig = inspect.signature(target_skill.run)
+                    if len(sig.parameters) == 1:
+                        return str(target_skill.run(args))
+                    else:
+                        return str(target_skill.run(**args))
+            except Exception as e_ev:
+                return f"❌ Evrilmiş beceri ({name}) çalıştırma hatası: {e_ev}"
         # Statik tabloda yoksa: bu bir skill araci olabilir (skills/ altinda
         # kullanicinin sonradan ekledigi bir klasor) - skills_engine'e sor.
         skill_result = skills_engine.execute_skill_tool(name, args, progress_cb)
@@ -3353,6 +3397,69 @@ async def memory_long_forget(data: dict = None):
         min_freshness=float((data or {}).get("min_freshness") or 0.02),
         keep_important=float((data or {}).get("keep_important") or 3.0))
     return {"ok": True, "forgotten": n, "stats": long_term_memory.stats()}
+
+
+@app.post("/api/transcribe")
+@app.post("/transcribe")
+async def transcribe_audio_api(request: Request, file: UploadFile = File(None)):
+    """
+    Ses kaydını metne dönüştürür (Groq Whisper API whisper-large-v3-turbo).
+    Web Speech API desteği olmayan ortamlarda (Electron / Mobil) MediaRecorder yedeği.
+    """
+    audio_bytes = None
+    filename = "audio.webm"
+    content_type = "audio/webm"
+
+    if file is not None:
+        try:
+            audio_bytes = await file.read()
+            filename = file.filename or "audio.webm"
+            content_type = file.content_type or "audio/webm"
+        except Exception as e:
+            print(f"[TRANSCRIBE] Dosya okuma hatası: {e}")
+
+    if not audio_bytes:
+        try:
+            body = await request.json()
+            if "audio_base64" in body:
+                raw_b64 = body["audio_base64"]
+                if "," in raw_b64:
+                    raw_b64 = raw_b64.split(",", 1)[1]
+                audio_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            pass
+
+    if not audio_bytes:
+        return {"ok": False, "error": "Ses verisi alınamadı", "text": ""}
+
+    groq_key = get_key("groq_key")
+    if not groq_key:
+        return {"ok": False, "error": "GROQ_API_KEY yapılandırılmamış", "text": ""}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            files = {"file": (filename, audio_bytes, content_type)}
+            data = {
+                "model": "whisper-large-v3-turbo",
+                "language": "tr",
+                "response_format": "json"
+            }
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {groq_key}"},
+                files=files,
+                data=data
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                text = result.get("text", "").strip()
+                return {"ok": True, "text": text}
+            else:
+                print(f"[TRANSCRIBE] Groq API Hatası ({resp.status_code}): {resp.text}")
+                return {"ok": False, "error": f"Groq Whisper hatası ({resp.status_code})", "text": ""}
+    except Exception as e:
+        print(f"[TRANSCRIBE] İstisna: {e}")
+        return {"ok": False, "error": f"Transkripsiyon hatası: {str(e)}", "text": ""}
 
 
 @app.get("/batch/stats")

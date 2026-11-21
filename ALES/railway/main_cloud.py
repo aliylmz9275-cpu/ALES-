@@ -31,10 +31,13 @@ ENV DEGISKENLERI (Railway/Render panelinden ayarlanir):
 import os
 import sys
 import re
+import json
+import base64
+import httpx
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 
@@ -393,6 +396,60 @@ async def get_real_system_status():
         }
 
     return {"ok": True, "capabilities": caps}
+
+
+@app.post("/api/transcribe")
+@app.post("/transcribe")
+async def transcribe_audio_api(request: Request, file: UploadFile = File(None)):
+    """Ses kaydını metne dönüştürür (Groq Whisper API)."""
+    import config_manager as cm
+    audio_bytes = None
+    filename = "audio.webm"
+    content_type = "audio/webm"
+
+    if file is not None:
+        try:
+            audio_bytes = await file.read()
+            filename = file.filename or "audio.webm"
+            content_type = file.content_type or "audio/webm"
+        except Exception:
+            pass
+
+    if not audio_bytes:
+        try:
+            body = await request.json()
+            if "audio_base64" in body:
+                raw_b64 = body["audio_base64"]
+                if "," in raw_b64:
+                    raw_b64 = raw_b64.split(",", 1)[1]
+                audio_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            pass
+
+    if not audio_bytes:
+        return {"ok": False, "error": "Ses verisi alınamadı", "text": ""}
+
+    groq_key = cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")
+    if not groq_key:
+        return {"ok": False, "error": "GROQ_API_KEY bulunamadı", "text": ""}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            files = {"file": (filename, audio_bytes, content_type)}
+            data = {"model": "whisper-large-v3-turbo", "language": "tr", "response_format": "json"}
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {groq_key}"},
+                files=files,
+                data=data
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                return {"ok": True, "text": result.get("text", "").strip()}
+            else:
+                return {"ok": False, "error": f"Groq Whisper hatası ({resp.status_code})", "text": ""}
+    except Exception as e:
+        return {"ok": False, "error": f"Transkripsiyon hatası: {str(e)}", "text": ""}
 
 # ─── HTTP: SOHBET GECMISI (conversations.py DOGRUDAN reuse) ───────
 @app.get("/conversations")
