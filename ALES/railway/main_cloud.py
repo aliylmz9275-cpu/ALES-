@@ -56,6 +56,11 @@ import multi_agent  # noqa: E402
 import conversations as conv_store  # noqa: E402
 
 try:
+    import voice
+except Exception as _e:
+    voice = None
+
+try:
     import telemetry
 except Exception as _e:
     telemetry = None
@@ -87,6 +92,7 @@ def has_any_api_key() -> bool:
         ("sambanova_key", "SAMBANOVA_API_KEY"),
         ("openrouter_key", "OPENROUTER_API_KEY"),
         ("nvidia_key", "NVIDIA_API_KEY"),
+        ("openai_key", "OPENAI_API_KEY"),
     ))
 
 DIST_DIR = BASE_DIR / "dist"
@@ -130,25 +136,24 @@ async def auth_verify(x_ales_key: str = Header(default="")):
 
 # ─── SISTEM PROMPTU (Genel ve Yetkin Asistan) ─────────────────────────
 SYSTEM_PROMPT = """Sen ALES (Advanced Logic Execution System), Ali'nin kişisel AI asistanı ve düşünce ortağısın.
-Şu an CLOUD/TELEFON modunda çalışıyorsun - Ali'nin bilgisayarında DEĞİL, internette bir sunucudasın.
+Şu an CLOUD / WEB / MOBİL modunda çalışıyorsun.
 
 GENEL ASİSTAN VE DÜŞÜNCE ORTAĞI:
 - Sen çok yönlü, derin genel kültüre ve analitik yetkinliğe sahip genel bir yapay zeka asistanısın.
 - Bilim, felsefe, havacılık, tarih, sanat, gündelik konular ve teknoloji dahil her soruya doğal, akıcı, kapsamlı ve samimi bir dille doğrudan yanıt ver.
 - Kullanıcı açıkça istemediği sürece konuşmayı ASLA kodlamaya, web kazımaya (scraping), görev otomasyonuna veya bot işlevlerine ZORLAMA. Bir düşünce ortağı gibi sohbet et ve akıl yürüt.
 
-BU MOD İÇİN ÖNEMLİ KISIT: Bilgisayara fiziksel erişimin YOK. Şu özellikler sadece masaüstü ALES'te çalışır:
-- Masaüstü/tarayıcı otomasyonu
-- Ekran görüntüsü alma/analiz etme
-- Bilgisayardaki yerel dosyaları okuma/yazma
-- Yerel masaüstü uygulamalarını açma
-Kullanıcı bunları isterse "Bu özellik masaüstü ALES uygulamasında çalışır, bilgisayarındaki ALES'i açıp oradan deneyebilirsin" de.
+DOKÜMAN & PDF ÜRETİMİ (TAM AKTİF):
+- PDF, rapor ve biçimlendirilmiş doküman oluşturma motorun bulutta TAM VE EKSİKSİZ AKTİFTİR.
+- Kullanıcı bir PDF, rapor veya doküman istediğinde ASLA "bilgisayara erişimim yok", "masaüstü ALES'te deneyin" deme! Bulut sunucusu doğrudan PDF dosyasını üretir ve kullanıcıya indirme bağlantısı sunar.
 
-YAPABİLDİKLERİN: Sohbet, genel kültür, felsefe, havacılık, bilim, analiz, stratejik tavsiye, çoklu-perspektif değerlendirme.
+BU MOD İÇİN FİZİKSEL KISIT:
+- Kullanıcının şahsi bilgisayarının ekranını görme, masaüstü fare/klavyesine tıklama veya kullanıcının yerel C:\\ diskindeki şahsi dosyalarını okuma özellikleri yalnızca yerel masaüstü ALES uygulamasında çalışır.
 
 AGGRESSIVE TOOL EXECUTION (CLAUDE PROTOCOL):
-- NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.
-- Kullanıcı bir PDF, rapor veya doküman dosyası oluşturulmasını istediğinde ASLA nasıl yapılacağını veya Python kodunu anlatma; doğrudan içeriği üret ve PDF bağlantısını ver.
+- NEVER explain how to do a task if you have a tool for it. YOU MUST execute the task directly.
+- If the user asks for a PDF, document, or report, DO NOT give them Python instructions or tutorial code. Provide the complete structured report text directly so the system compiles it into a downloadable PDF immediately.
+- Kullanıcı bir PDF, rapor veya doküman dosyası oluşturulmasını istediğinde ASLA nasıl yapılacağını veya Python kodunu anlatma; doğrudan içeriği eksiksiz üret.
 
 Türkçe konuş, kısa ve net ol. Tarih: {now}"""
 
@@ -165,10 +170,17 @@ _CANDIDATE_PROVIDERS = [
 ]
 _PROVIDER_CHAIN = [(name, caller) for name, caller in _CANDIDATE_PROVIDERS if caller is not None]
 
-async def chat_waterfall(history: list):
+async def chat_waterfall(history: list, pdf_intent: bool = False):
     """Sohbet gecmisini alir, ilk basarili saglayicinin cevabini doner.
     (cevap_metni, hata_notu_veya_None) tuple'i doner."""
     sys_prompt = SYSTEM_PROMPT.format(now=datetime.now().strftime("%d.%m.%Y %H:%M"))
+    if pdf_intent:
+        sys_prompt += (
+            "\n\n[KRİTİK TALİMAT - PDF & RAPOR MODU]: Kullanıcı bir PDF raporu/belgesi talep etti. "
+            "Bu konuyla ilgili eksiksiz, profesyonel, zengin ve detaylı bir rapor içeriği üret. "
+            "Başlıkları (#, ##), alt maddeleri, özet ve sonuç bölümlerini temiz Markdown formatında yapılandır. "
+            "ASLA 'Python ile yapabilirsiniz' veya kod örneği verme. DOĞRUDAN raporun kendisini yaz!"
+        )
     # multi_agent'in caller'lari (prompt, system) alir - son kullanici
     # mesajini prompt olarak, gecmisi de sistem promptuna gomerek geciyoruz
     # (bu caller'lar coklu-turn history parametresi almiyor, tek prompt alir).
@@ -187,6 +199,51 @@ async def chat_waterfall(history: list):
             return text, (note or None)
         errors.append(f"{name}: {text}")
     return ("Su an hicbir AI saglayicisina ulasilamiyor. Sebepler:\n" + "\n".join(errors)), None
+
+
+async def send_cloud_tts_audio(text: str, websocket: WebSocket):
+    """Bulut ve mobil istemciye WebSocket üzerinden ses gönderir (ChatGPT/ElevenLabs/Edge-TTS)."""
+    try:
+        import voice
+        import config_manager as cm
+        cfg = cm.load_config()
+        openai_key = (
+            _SESSION_KEYS.get("openai_key")
+            or cfg.get("openai_key")
+            or cm.get_key("openai_key")
+            or os.environ.get("OPENAI_API_KEY", "")
+        )
+        eleven_key = (
+            _SESSION_KEYS.get("elevenlabs_key")
+            or cfg.get("elevenlabs_key")
+            or cm.get_key("elevenlabs_key")
+            or os.environ.get("ELEVENLABS_API_KEY", "")
+            or os.environ.get("ELEVENLABS_KEY", "")
+        )
+        voice_id = cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or getattr(voice, "DEFAULT_OPENAI_VOICE", "alloy")
+        edge_voice = cfg.get("edge_voice") or getattr(voice, "DEFAULT_EDGE_VOICE", "tr-TR-AhmetNeural")
+
+        clean = voice._clean_for_speech(text) if hasattr(voice, "_clean_for_speech") else text
+        if not clean or not clean.strip():
+            return
+
+        loop = asyncio.get_event_loop()
+        audio_bytes = await loop.run_in_executor(
+            None,
+            voice.synthesize,
+            clean,
+            eleven_key,
+            voice_id,
+            edge_voice,
+            openai_key,
+            voice_id
+        )
+        if audio_bytes:
+            mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
+            b64 = base64.b64encode(audio_bytes).decode("ascii")
+            await websocket.send_json({"type": "audio", "data": b64, "mime": mime})
+    except Exception as e:
+        print(f"[CLOUD TTS] Ses gönderim hatası: {e}")
 
 # ─── WEBSOCKET ─────────────────────────────────────────────────────
 @app.websocket("/ws")
@@ -214,6 +271,7 @@ async def ws_endpoint(websocket: WebSocket):
                 env_map = {
                     "groq_key": "GROQ_API_KEY",
                     "cerebras_key": "CEREBRAS_API_KEY",
+                    "openai_key": "OPENAI_API_KEY",
                     "elevenlabs_key": "ELEVENLABS_API_KEY",
                     "gemini_key": "GEMINI_API_KEY",
                     "sambanova_key": "SAMBANOVA_API_KEY",
@@ -255,9 +313,50 @@ async def ws_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "error", "content": "❌ Sunucuda hic AI API key tanimli degil (Ayarlar sekmesinden veya Render ortam degiskenlerinden ekleyin)."})
                 continue
 
+            _pdf_intent = bool(re.search(
+                r"\b(pdf|rapor|doküman|dokuman|belge)\b.*\b(yap|oluştur|olustur|hazırla|hazirla|üret|uret|indir|çıkart|cıkart|yaz|kaydet|generate|create|aktar|çıkar|cikar)\b|"
+                r"\b(yap|oluştur|olustur|hazırla|hazirla|üret|uret|indir|çıkart|cıkart|yaz|kaydet|generate|create|aktar|çıkar|cikar)\b.*\b(pdf|rapor|doküman|dokuman|belge)\b",
+                text, re.IGNORECASE
+            ))
+
             if re.search(r"derin analiz|tartis|4 ?ai", text, re.IGNORECASE):
                 await websocket.send_json({"type": "tool_use", "tool": "multi_agent", "content": "4 AI tartisiyor..."})
                 reply = await multi_agent.run_multi_agent_discussion(text)
+            elif _pdf_intent:
+                await websocket.send_json({
+                    "type": "tool_use",
+                    "tool": "generate_pdf",
+                    "content": "📄 Belge içeriği hazırlanıyor ve PDF oluşturuluyor..."
+                })
+                reply, note = await chat_waterfall(history, pdf_intent=True)
+                if note:
+                    reply += "\n\n" + note
+                if document_generator:
+                    try:
+                        pdf_title = "ALES_Raporu"
+                        for line in reply.strip().split("\n"):
+                            clean_l = re.sub(r"^[#\*\-\s]+", "", line).strip()
+                            if 3 < len(clean_l) < 60:
+                                pdf_title = clean_l
+                                break
+                        gen_res = document_generator.generate_pdf(pdf_title, reply)
+                        if gen_res.get("ok"):
+                            dl_url = gen_res.get("url", "")
+                            fname = gen_res.get("filename", "belge.pdf")
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool": "generate_pdf",
+                                "result": f"✅ PDF başarıyla oluşturuldu: {fname}"
+                            })
+                            reply += f"\n\n---\n### 📄 Belgeniz Hazır\n**Dosya:** [{fname}]({dl_url})\n\n[⬇️ PDF'yi İndir]({dl_url})"
+                        else:
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool": "generate_pdf",
+                                "result": f"⚠️ PDF oluşturma uyarısı: {gen_res.get('error')}"
+                            })
+                    except Exception as e_pdf:
+                        print(f"[CLOUD PDF] Üretim hatası: {e_pdf}")
             else:
                 reply, note = await chat_waterfall(history)
                 if note:
@@ -265,6 +364,9 @@ async def ws_endpoint(websocket: WebSocket):
 
             conv_store.append_message(conv_id, "assistant", reply)
             await websocket.send_json({"type": "message", "content": reply})
+
+            # Sesli yanıtı WebSocket üzerinden gönder (ChatGPT / ElevenLabs / Edge-TTS)
+            asyncio.create_task(send_cloud_tts_audio(reply, websocket))
     except WebSocketDisconnect:
         pass
 
@@ -277,6 +379,7 @@ async def status():
         "mode": "cloud",
         "has_groq": bool(_SESSION_KEYS.get("groq_key") or cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
         "has_cerebras": bool(_SESSION_KEYS.get("cerebras_key") or cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
+        "has_openai": bool(_SESSION_KEYS.get("openai_key") or cm.get_key("openai_key") or os.environ.get("OPENAI_API_KEY")),
         "has_gemini": bool(_SESSION_KEYS.get("gemini_key") or cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
         "has_sambanova": bool(_SESSION_KEYS.get("sambanova_key") or cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
         "has_openrouter": bool(_SESSION_KEYS.get("openrouter_key") or cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
@@ -298,6 +401,7 @@ async def api_session_sync(data: dict):
         env_map = {
             "groq_key": "GROQ_API_KEY",
             "cerebras_key": "CEREBRAS_API_KEY",
+            "openai_key": "OPENAI_API_KEY",
             "elevenlabs_key": "ELEVENLABS_API_KEY",
             "gemini_key": "GEMINI_API_KEY",
             "sambanova_key": "SAMBANOVA_API_KEY",
@@ -333,11 +437,13 @@ async def get_config(x_ales_key: str = Header(default="")):
     return {
         "has_groq": bool(_SESSION_KEYS.get("groq_key") or cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
         "has_cerebras": bool(_SESSION_KEYS.get("cerebras_key") or cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
+        "has_openai": bool(_SESSION_KEYS.get("openai_key") or cm.get_key("openai_key") or os.environ.get("OPENAI_API_KEY")),
         "has_elevenlabs": bool(_SESSION_KEYS.get("elevenlabs_key") or cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY")),
         "has_gemini": bool(_SESSION_KEYS.get("gemini_key") or cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
         "has_sambanova": bool(_SESSION_KEYS.get("sambanova_key") or cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
         "has_openrouter": bool(_SESSION_KEYS.get("openrouter_key") or cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
         "has_nvidia": bool(_SESSION_KEYS.get("nvidia_key") or cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
+        "openai_voice": cfg.get("openai_voice") or "alloy",
         "elevenlabs_voice": cfg.get("elevenlabs_voice") or "eleven_monolingual_v1",
         "edge_voice": cfg.get("edge_voice") or "tr-TR-AhmetNeural",
         "mode": cm.get_mode(),
@@ -355,6 +461,7 @@ async def set_config(data: dict, x_ales_key: str = Header(default="")):
     env_map = {
         "groq_key": "GROQ_API_KEY",
         "cerebras_key": "CEREBRAS_API_KEY",
+        "openai_key": "OPENAI_API_KEY",
         "elevenlabs_key": "ELEVENLABS_API_KEY",
         "gemini_key": "GEMINI_API_KEY",
         "sambanova_key": "SAMBANOVA_API_KEY",
@@ -362,7 +469,7 @@ async def set_config(data: dict, x_ales_key: str = Header(default="")):
         "nvidia_key": "NVIDIA_API_KEY",
     }
     
-    for key in ["groq_key", "cerebras_key", "elevenlabs_key", "elevenlabs_voice", "edge_voice",
+    for key in ["groq_key", "cerebras_key", "openai_key", "elevenlabs_key", "openai_voice", "elevenlabs_voice", "edge_voice",
                 "gemini_key", "sambanova_key", "openrouter_key", "nvidia_key"]:
         if key in data:
             val = data[key]
@@ -480,6 +587,17 @@ async def test_key_route(data: dict):
             client = genai.Client(api_key=key)
             client.models.list()
             return {"ok": True, "provider": "gemini"}
+        elif provider == "openai":
+            import httpx
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {key}"}
+                )
+                if resp.status_code == 200:
+                    return {"ok": True, "provider": "openai"}
+                else:
+                    return {"ok": False, "error": f"OpenAI Doğrulama Hatası ({resp.status_code}): {resp.text}"}
         else:
             return {"ok": False, "error": f"Bilinmeyen sağlayıcı: {provider}"}
     except Exception as e:
@@ -631,13 +749,39 @@ async def approvals_stub():
     return {"approvals": []}
 
 @app.get("/voices")
-async def voices_stub():
-    return {"voices": [], "current": None, "note": "Edge-TTS ve ElevenLabs bulutta devrede."}
+async def voices_endpoint():
+    """Seçilebilir sesler - Ayarlar'daki ses dropdown'u için (ChatGPT, ElevenLabs, Edge-TTS)."""
+    import config_manager as cm
+    cfg = cm.load_config()
+    openai_voices = []
+    eleven_voices = []
+    edge_voices = []
+    default_openai = "alloy"
+    default_edge = "tr-TR-AhmetNeural"
+    try:
+        import voice
+        openai_voices = getattr(voice, "OPENAI_VOICES", [])
+        eleven_voices = getattr(voice, "ELEVENLABS_VOICES", [])
+        edge_voices = getattr(voice, "EDGE_VOICES", [])
+        default_openai = getattr(voice, "DEFAULT_OPENAI_VOICE", "alloy")
+        default_edge = getattr(voice, "DEFAULT_EDGE_VOICE", "tr-TR-AhmetNeural")
+    except Exception:
+        pass
+    all_voices = openai_voices + eleven_voices
+    return {
+        "voices": all_voices,
+        "openai_voices": openai_voices,
+        "current": cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or default_openai,
+        "has_openai_key": bool(_SESSION_KEYS.get("openai_key") or cfg.get("openai_key") or cm.get_key("openai_key") or os.environ.get("OPENAI_API_KEY")),
+        "has_elevenlabs_key": bool(_SESSION_KEYS.get("elevenlabs_key") or cfg.get("elevenlabs_key") or cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY")),
+        "edge_voices": edge_voices,
+        "current_edge_voice": cfg.get("edge_voice") or default_edge,
+    }
 
 @app.post("/speak")
 @app.post("/speak_test")
 async def cloud_speak_api(payload: dict):
-    """Bulut ve web kullanıcıları için metni sese çevirir (Edge-TTS / ElevenLabs)."""
+    """Bulut ve web kullanıcıları için metni sese çevirir (ChatGPT / ElevenLabs / Edge-TTS)."""
     text = (payload.get("text") or "").strip()
     if not text:
         return {"ok": False, "error": "Metin boş"}
@@ -645,7 +789,14 @@ async def cloud_speak_api(payload: dict):
         import voice
         import config_manager as cm
         cfg = cm.load_config()
-        key = (
+        openai_key = (
+            payload.get("openai_key")
+            or _SESSION_KEYS.get("openai_key")
+            or cfg.get("openai_key")
+            or cm.get_key("openai_key")
+            or os.environ.get("OPENAI_API_KEY", "")
+        )
+        eleven_key = (
             payload.get("elevenlabs_key")
             or _SESSION_KEYS.get("elevenlabs_key")
             or cfg.get("elevenlabs_key")
@@ -653,13 +804,21 @@ async def cloud_speak_api(payload: dict):
             or os.environ.get("ELEVENLABS_API_KEY", "")
             or os.environ.get("ELEVENLABS_KEY", "")
         )
-        if isinstance(key, str): key = key.strip()
-        voice_id = payload.get("voice_id") or cfg.get("elevenlabs_voice") or getattr(voice, "DEFAULT_ELEVENLABS_VOICE", "pNInz6obpgDQGcFmaJgB")
+        voice_id = payload.get("voice_id") or cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or getattr(voice, "DEFAULT_OPENAI_VOICE", "alloy")
         edge_voice = payload.get("edge_voice") or cfg.get("edge_voice") or getattr(voice, "DEFAULT_EDGE_VOICE", "tr-TR-AhmetNeural")
 
         loop = asyncio.get_event_loop()
         clean = voice._clean_for_speech(text) if hasattr(voice, "_clean_for_speech") else text
-        audio_bytes = await loop.run_in_executor(None, voice.synthesize, clean, key, voice_id, edge_voice)
+        audio_bytes = await loop.run_in_executor(
+            None,
+            voice.synthesize,
+            clean,
+            eleven_key,
+            voice_id,
+            edge_voice,
+            openai_key,
+            voice_id
+        )
         if audio_bytes:
             mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
             b64 = base64.b64encode(audio_bytes).decode("ascii")

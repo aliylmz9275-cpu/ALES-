@@ -49,6 +49,19 @@ def _clean_for_speech(text: str) -> str:
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip()
 
+# ── OpenAI TTS (Birebir Resmi ChatGPT Sesleri) ───────────────────
+OPENAI_VOICES = [
+    {"id": "alloy", "name": "Alloy - Resmi ChatGPT (İkonik Doğal Ses)", "engine": "openai"},
+    {"id": "nova", "name": "Nova - ChatGPT Kadın (Sıcak & Akıcı)", "engine": "openai"},
+    {"id": "echo", "name": "Echo - ChatGPT Erkek (Sakin & Derin)", "engine": "openai"},
+    {"id": "fable", "name": "Fable - ChatGPT İfadeli Ses", "engine": "openai"},
+    {"id": "onyx", "name": "Onyx - ChatGPT Otoriter Erkek", "engine": "openai"},
+    {"id": "shimmer", "name": "Shimmer - ChatGPT Berrak Kadın", "engine": "openai"},
+    {"id": "sage", "name": "Sage - ChatGPT 4o Yeni Nesil", "engine": "openai"},
+    {"id": "coral", "name": "Coral - ChatGPT 4o Sıcak Yeni Nesil", "engine": "openai"},
+]
+DEFAULT_OPENAI_VOICE = "alloy"
+
 # ElevenLabs'in cok-dilli (Turkce dahil) modelinde dogal sesli,
 # JARVIS tarzina uygun secenekler. Kullanici ayarlardan secebilir.
 ELEVENLABS_VOICES = [
@@ -68,6 +81,42 @@ def _temp_path(name: str) -> str:
     return f"/tmp/{name}"
 
 
+def synthesize_openai(text: str, api_key: str, voice_id: str = "alloy"):
+    """OpenAI TTS API - Birebir resmi ChatGPT sesi (alloy, nova, echo, onyx, shimmer, fable)."""
+    if not api_key or not str(api_key).strip():
+        return None
+    try:
+        import httpx
+        key = str(api_key).strip()
+        vid = (voice_id or DEFAULT_OPENAI_VOICE).strip().lower()
+        if vid in ["chatgpt", "default"]:
+            vid = "alloy"
+
+        valid_voices = ["alloy", "nova", "echo", "fable", "onyx", "shimmer", "sage", "coral", "ash", "ballad"]
+        target_voice = vid if vid in valid_voices else "alloy"
+
+        url = "https://api.openai.com/v1/audio/speech"
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "tts-1",
+            "input": text[:2500],
+            "voice": target_voice,
+            "response_format": "mp3"
+        }
+        with httpx.Client(timeout=25) as client:
+            r = client.post(url, headers=headers, json=payload)
+        if r.status_code == 200 and r.content:
+            return r.content
+        print(f"[TTS] OpenAI TTS HTTP {r.status_code}: {r.text[:200]}")
+        return None
+    except Exception as e:
+        print(f"[TTS] OpenAI TTS hatası: {e}")
+        return None
+
+
 def synthesize_elevenlabs(text: str, api_key: str, voice_id: str = None):
     """ElevenLabs ile ses uretir. Basarili olursa ham mp3 bytes, olmazsa None doner."""
     if not api_key or not str(api_key).strip():
@@ -84,6 +133,8 @@ def synthesize_elevenlabs(text: str, api_key: str, voice_id: str = None):
             "antoni": "ErXwobaYiN019PkySvjV",
             "josh": "TxGEqnHWrfWFTfGW9XjX",
             "bella": "EXAVITQu4vr4xnSDxMaL",
+            "alloy": "21m00Tcm4TlvDq8ikWAM",   # ChatGPT Alloy benzeri doğal ses
+            "nova": "EXAVITQu4vr4xnSDxMaL",
         }
         if vid.lower() in voice_map:
             vid = voice_map[vid.lower()]
@@ -95,12 +146,12 @@ def synthesize_elevenlabs(text: str, api_key: str, voice_id: str = None):
             "Accept": "audio/mpeg",
         }
         payload = {
-            "text": text[:1000],
+            "text": text[:1500],
             "model_id": "eleven_multilingual_v2",
             "voice_settings": {
-                "stability": 0.45,
-                "similarity_boost": 0.8,
-                "style": 0.25,
+                "stability": 0.35,              # Doğal nefes ve insansı tonlama
+                "similarity_boost": 0.75,
+                "style": 0.35,                  # Konuşma akıcılığı
                 "use_speaker_boost": True,
             },
         }
@@ -127,7 +178,8 @@ def synthesize_edge_sync(text: str, voice: str = "tr-TR-AhmetNeural"):
         import edge_tts
 
         async def _gen():
-            comm = edge_tts.Communicate(text[:600], voice)
+            # Doğal insan konuşma hızına yakın hafif canlı tempo
+            comm = edge_tts.Communicate(text[:1200], voice, rate="+2%", pitch="+0Hz")
             await comm.save(path)
 
         try:
@@ -195,12 +247,16 @@ def synthesize_sapi_sync(text: str) -> bytes | None:
     return None
 
 
-def synthesize(text: str, elevenlabs_key: str = "", elevenlabs_voice: str = "", edge_voice: str = ""):
+def synthesize(text: str, elevenlabs_key: str = "", elevenlabs_voice: str = "", edge_voice: str = "", openai_key: str = "", openai_voice: str = ""):
     """
     Ana TTS fonksiyonu. SENKRON - her zaman bir executor/thread icinde
     cagrilmali (asyncio event loop'unu kilitler). ARTIK SESI KENDISI
     CALMIYOR - ham ses bytes'i (mp3 veya wav) ya da None doner.
-    Oncelik: ElevenLabs -> Edge-TTS -> SAPI (yerel ses motoru)
+    Oncelik:
+      1. OpenAI TTS (Birebir resmi ChatGPT sesleri: alloy, nova, echo, onyx, shimmer)
+      2. ElevenLabs (İnsansı tonlama, nefes payı ve duygu: Adam, Rachel)
+      3. Edge-TTS (Ücretsiz Türkçe Ahmet/Emel Neural)
+      4. Windows SAPI (Yerel ses motoru)
     """
     if not text or not text.strip():
         return None
@@ -208,17 +264,39 @@ def synthesize(text: str, elevenlabs_key: str = "", elevenlabs_voice: str = "", 
     if not clean:
         return None
 
-    if elevenlabs_key:
-        data = synthesize_elevenlabs(clean, elevenlabs_key, elevenlabs_voice or DEFAULT_ELEVENLABS_VOICE)
+    # 1. Birebir Resmi ChatGPT Sesi (OpenAI TTS: alloy, nova, echo)
+    if openai_key and str(openai_key).strip():
+        o_voice = openai_voice or elevenlabs_voice or DEFAULT_OPENAI_VOICE
+        data = synthesize_openai(clean, str(openai_key).strip(), o_voice)
+        if data:
+            return data
+        print("[TTS] OpenAI TTS basarisiz, ElevenLabs/Edge-TTS deneniyor...")
+
+    # 2. ElevenLabs (İnsansı doğal tonlama)
+    if elevenlabs_key and str(elevenlabs_key).strip():
+        data = synthesize_elevenlabs(clean, str(elevenlabs_key).strip(), elevenlabs_voice or DEFAULT_ELEVENLABS_VOICE)
         if data:
             return data
         print("[TTS] ElevenLabs basarisiz, Edge-TTS'e geciliyor...")
 
+    # 3. Edge-TTS (Ücretsiz Türkçe Neural)
     edge_res = synthesize_edge_sync(clean, edge_voice or DEFAULT_EDGE_VOICE)
     if edge_res:
         return edge_res
 
     print("[TTS] Edge-TTS basarisiz, Windows SAPI motoruna geciliyor...")
     return synthesize_sapi_sync(clean)
+
+
+def synthesize_chatgpt(text: str, openai_key: str = "", elevenlabs_key: str = "", voice_id: str = "alloy", edge_voice: str = "tr-TR-AhmetNeural"):
+    """ChatGPT benzeri gerçekçi insan sesi üreten kolaylaştırıcı arayüz."""
+    return synthesize(
+        text=text,
+        elevenlabs_key=elevenlabs_key,
+        elevenlabs_voice=voice_id,
+        edge_voice=edge_voice,
+        openai_key=openai_key,
+        openai_voice=voice_id
+    )
 
 

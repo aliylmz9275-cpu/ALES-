@@ -266,8 +266,7 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             pass
 
         size_bytes = pdf_path.stat().st_size
-        port = os.environ.get("PORT", "8000")
-        download_url = f"http://localhost:{port}/static/pdfs/{filename}"
+        download_url = f"/static/pdfs/{filename}"
 
         return {
             "ok": True,

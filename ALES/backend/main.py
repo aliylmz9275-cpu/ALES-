@@ -102,7 +102,7 @@ import multi_agent
 from memory import remember_fact, update_user_profile, get_user_profile, search_memory, get_all_facts, log_event, build_context_prompt
 from browser import fetch_url, get_news_tr, get_weather, get_crypto_prices, get_exchange_rates, google_search, get_worldview
 import voice
-from voice import synthesize, ELEVENLABS_VOICES, DEFAULT_ELEVENLABS_VOICE, EDGE_VOICES, DEFAULT_EDGE_VOICE
+from voice import synthesize, ELEVENLABS_VOICES, DEFAULT_ELEVENLABS_VOICE, EDGE_VOICES, DEFAULT_EDGE_VOICE, OPENAI_VOICES, DEFAULT_OPENAI_VOICE
 import fiverr
 from fiverr import get_fiverr_messages_manual, get_bionluk_messages_manual, open_fiverr_for_login
 from playwright_browser import browse_sync, search_sync
@@ -1567,19 +1567,26 @@ async def send_tts_audio(text: str, websocket: WebSocket):
         try:
             cfg = load_config()
             loop = asyncio.get_event_loop()
-            key = (
+            openai_key = (
+                cfg.get("openai_key", "")
+                or get_key("openai_key")
+                or os.environ.get("OPENAI_API_KEY", "")
+            ).strip()
+            eleven_key = (
                 cfg.get("elevenlabs_key", "")
                 or get_key("elevenlabs_key")
                 or os.environ.get("ELEVENLABS_API_KEY", "")
                 or os.environ.get("ELEVENLABS_KEY", "")
             ).strip()
-            voice_id = cfg.get("elevenlabs_voice") or DEFAULT_ELEVENLABS_VOICE
+            voice_id = cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or DEFAULT_OPENAI_VOICE
             edge_voice = cfg.get("edge_voice") or DEFAULT_EDGE_VOICE
             audio_bytes = await loop.run_in_executor(
                 _executor, synthesize, text,
-                key,
+                eleven_key,
                 voice_id,
                 edge_voice,
+                openai_key,
+                voice_id,
             )
             if audio_bytes:
                 mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
@@ -3584,36 +3591,45 @@ async def batch_stats():
 
 @app.get("/voices")
 async def get_voices():
-    """Secilebilir sesler - Ayarlar'daki ses dropdown'u icin"""
+    """Secilebilir sesler - Ayarlar'daki ses dropdown'u icin (ChatGPT, ElevenLabs, Edge-TTS)"""
     cfg = load_config()
+    all_voices = OPENAI_VOICES + ELEVENLABS_VOICES
     return {
-        "voices": ELEVENLABS_VOICES,
-        "current": cfg.get("elevenlabs_voice") or DEFAULT_ELEVENLABS_VOICE,
-        "has_elevenlabs_key": bool(cfg.get("elevenlabs_key")),
+        "voices": all_voices,
+        "openai_voices": OPENAI_VOICES,
+        "current": cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or DEFAULT_OPENAI_VOICE,
+        "has_openai_key": bool(cfg.get("openai_key") or get_key("openai_key") or os.environ.get("OPENAI_API_KEY")),
+        "has_elevenlabs_key": bool(cfg.get("elevenlabs_key") or get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY")),
         "edge_voices": EDGE_VOICES,
         "current_edge_voice": cfg.get("edge_voice") or DEFAULT_EDGE_VOICE,
     }
 
 @app.post("/speak_test")
 async def speak_test(data: dict):
-    """Ayarlar'daki 'Sesi Test Et' butonu icin - secilen sesle ornek cumle
-    soyler. ESKIDEN sesi backend kendi acip calıyordu (isletim sisteminin
-    medya oynaticisiyla, ayri pencere) - ARTIK ses verisini dogrudan HTTP
-    yanitinda donuyor, frontend aninda <audio> ile calıyor."""
+    """Ayarlar'daki 'Sesi Test Et' butonu icin - secilen sesle ornek cumle soyler."""
     cfg = load_config()
-    text = data.get("text") or "Merhaba Ali. Ben ALES. Sesimi nasil buluyorsun?"
-    key = (
+    text = data.get("text") or "Merhaba Ali. Ben ALES. ChatGPT sesimle nasil duyuluyorum?"
+    openai_key = (
+        data.get("openai_key")
+        or cfg.get("openai_key", "")
+        or get_key("openai_key")
+        or os.environ.get("OPENAI_API_KEY", "")
+    )
+    if isinstance(openai_key, str): openai_key = openai_key.strip()
+
+    eleven_key = (
         data.get("elevenlabs_key")
         or cfg.get("elevenlabs_key", "")
         or get_key("elevenlabs_key")
         or os.environ.get("ELEVENLABS_API_KEY", "")
         or os.environ.get("ELEVENLABS_KEY", "")
     )
-    if isinstance(key, str): key = key.strip()
-    voice_id = data.get("voice_id") or cfg.get("elevenlabs_voice") or DEFAULT_ELEVENLABS_VOICE
+    if isinstance(eleven_key, str): eleven_key = eleven_key.strip()
+
+    voice_id = data.get("voice_id") or cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or DEFAULT_OPENAI_VOICE
     edge_voice = data.get("edge_voice") or cfg.get("edge_voice") or DEFAULT_EDGE_VOICE
     loop = asyncio.get_event_loop()
-    audio_bytes = await loop.run_in_executor(_executor, synthesize, text, key, voice_id, edge_voice)
+    audio_bytes = await loop.run_in_executor(_executor, synthesize, text, eleven_key, voice_id, edge_voice, openai_key, voice_id)
     if not audio_bytes:
         return {"ok": False, "error": "Ses üretilemedi (key/bağlantı kontrol et)"}
     mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
@@ -5129,6 +5145,14 @@ async def speak_api(payload: dict):
     audio_bytes = None
     try:
         cfg = load_config()
+        openai_key = (
+            payload.get("openai_key")
+            or cfg.get("openai_key", "")
+            or get_key("openai_key")
+            or os.environ.get("OPENAI_API_KEY", "")
+        )
+        if isinstance(openai_key, str): openai_key = openai_key.strip()
+
         key = (
             payload.get("elevenlabs_key")
             or cfg.get("elevenlabs_key", "")
@@ -5137,7 +5161,7 @@ async def speak_api(payload: dict):
             or os.environ.get("ELEVENLABS_KEY", "")
         )
         if isinstance(key, str): key = key.strip()
-        voice_id = payload.get("voice_id") or cfg.get("elevenlabs_voice") or voice.DEFAULT_ELEVENLABS_VOICE
+        voice_id = payload.get("voice_id") or cfg.get("tts_voice") or cfg.get("openai_voice") or cfg.get("elevenlabs_voice") or voice.DEFAULT_OPENAI_VOICE
         edge_voice = payload.get("edge_voice") or cfg.get("edge_voice") or voice.DEFAULT_EDGE_VOICE
 
         if voice:
@@ -5148,6 +5172,8 @@ async def speak_api(payload: dict):
                     key,
                     voice_id,
                     edge_voice,
+                    openai_key,
+                    voice_id,
                 )
             except Exception as ve:
                 print(f"[SPEAK] voice.synthesize hatasi: {ve}")

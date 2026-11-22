@@ -324,7 +324,7 @@ _ENV_KEY_MAP = {
     "groq_key": "GROQ_API_KEY", "cerebras_key": "CEREBRAS_API_KEY",
     "gemini_key": "GEMINI_API_KEY", "openrouter_key": "OPENROUTER_API_KEY",
     "nvidia_key": "NVIDIA_API_KEY", "sambanova_key": "SAMBANOVA_API_KEY",
-    "elevenlabs_key": "ELEVENLABS_API_KEY",
+    "elevenlabs_key": "ELEVENLABS_API_KEY", "openai_key": "OPENAI_API_KEY",
 }
 
 def get_key(name: str) -> str:

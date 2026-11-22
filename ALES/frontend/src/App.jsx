@@ -136,14 +136,22 @@ function renderMessageContent(text) {
   return parts
 }
 
-// ElevenLabs cok-dilli (Turkce dahil) dogal sesler - voice.py ile ayni liste
+// ChatGPT (OpenAI) resmi sesleri + ElevenLabs dogal sesleri - voice.py ile ayni liste
 const VOICE_OPTIONS = [
-  { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam - Derin Erkek (JARVIS tarzi)' },
-  { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold - Sert/Otoriter Erkek' },
-  { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni - Sicak/Yumusak Erkek' },
-  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh - Genc Erkek' },
-  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel - Dogal Kadin' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella - Sicak Kadin' },
+  { id: 'alloy', name: 'Alloy - ChatGPT Resmi Sesi (Doğal/Dengeli Erkek/Kadın)' },
+  { id: 'nova', name: 'Nova - ChatGPT Samimi ve Akıcı Kadın Sesi' },
+  { id: 'echo', name: 'Echo - ChatGPT Yumuşak ve Derin Erkek Sesi' },
+  { id: 'shimmer', name: 'Shimmer - ChatGPT Berrak ve Neşeli Kadın Sesi' },
+  { id: 'onyx', name: 'Onyx - ChatGPT Otoriter ve Tok Erkek Sesi' },
+  { id: 'fable', name: 'Fable - ChatGPT Hikaye ve Anlatıcı Sesi' },
+  { id: 'sage', name: 'Sage - ChatGPT Sakin ve Bilge Ses' },
+  { id: 'coral', name: 'Coral - ChatGPT Sıcak ve Dinamik Ses' },
+  { id: 'pNInz6obpgDQGcFmaJgB', name: 'ElevenLabs: Adam - Derin Erkek (JARVIS tarzı)' },
+  { id: 'VR6AewLTigWG4xSOukaG', name: 'ElevenLabs: Arnold - Sert/Otoriter Erkek' },
+  { id: 'ErXwobaYiN019PkySvjV', name: 'ElevenLabs: Antoni - Sıcak/Yumuşak Erkek' },
+  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'ElevenLabs: Josh - Genç Erkek' },
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'ElevenLabs: Rachel - Sakin Kadın' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'ElevenLabs: Bella - Sıcak Kadın' },
 ]
 // Ucretsiz Edge-TTS sesleri (ElevenLabs key'i yoksa/basarisiz olursa
 // kullanilir) - voice.py'deki EDGE_VOICES ile ayni liste
@@ -3146,7 +3154,7 @@ function MetricsPanel() {
 function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, onAutoSpeakChange, isTab = false }) {
   const [subTab, setSubTab] = useState('basic') // 'basic' | 'advanced'
   const [keys, setKeys] = useState(() => {
-    const base = { groq:'', cerebras:'', elevenlabs:'', elevenlabs_voice: VOICE_OPTIONS[0].id, edge_voice: 'tr-TR-AhmetNeural', gemini:'', sambanova:'', openrouter:'', nvidia:'' }
+    const base = { groq:'', cerebras:'', openai:'', elevenlabs:'', elevenlabs_voice: VOICE_OPTIONS[0].id, edge_voice: 'tr-TR-AhmetNeural', gemini:'', sambanova:'', openrouter:'', nvidia:'' }
     try {
       const saved = JSON.parse(localStorage.getItem('ales_saved_api_keys') || '{}')
       return { ...base, ...saved }
@@ -3173,7 +3181,8 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     authFetch(API_URL+'/config').then(r=>r.json()).then(cfg=>{
       if (cfg) {
         setServerCfg(cfg)
-        if (cfg.elevenlabs_voice) setKeys(p=>({...p, elevenlabs_voice: cfg.elevenlabs_voice}))
+        if (cfg.openai_voice) setKeys(p=>({...p, elevenlabs_voice: cfg.openai_voice}))
+        else if (cfg.elevenlabs_voice) setKeys(p=>({...p, elevenlabs_voice: cfg.elevenlabs_voice}))
         if (cfg.edge_voice) setKeys(p=>({...p, edge_voice: cfg.edge_voice}))
       }
     }).catch(()=>{})
@@ -3210,12 +3219,16 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     const data = {}
     if (keys.groq.trim()) data.groq_key = keys.groq.trim()
     if (keys.cerebras.trim()) data.cerebras_key = keys.cerebras.trim()
+    if (keys.openai.trim()) data.openai_key = keys.openai.trim()
     if (keys.elevenlabs.trim()) data.elevenlabs_key = keys.elevenlabs.trim()
     if (keys.gemini.trim()) data.gemini_key = keys.gemini.trim()
     if (keys.sambanova.trim()) data.sambanova_key = keys.sambanova.trim()
     if (keys.openrouter.trim()) data.openrouter_key = keys.openrouter.trim()
     if (keys.nvidia.trim()) data.nvidia_key = keys.nvidia.trim()
-    if (keys.elevenlabs_voice) data.elevenlabs_voice = keys.elevenlabs_voice
+    if (keys.elevenlabs_voice) {
+      data.elevenlabs_voice = keys.elevenlabs_voice
+      data.openai_voice = keys.elevenlabs_voice
+    }
     if (keys.edge_voice) data.edge_voice = keys.edge_voice
 
     if (rememberKeys) {
@@ -3223,6 +3236,7 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
         localStorage.setItem('ales_saved_api_keys', JSON.stringify({
           groq: keys.groq.trim(),
           cerebras: keys.cerebras.trim(),
+          openai: keys.openai.trim(),
           elevenlabs: keys.elevenlabs.trim(),
           gemini: keys.gemini.trim(),
           sambanova: keys.sambanova.trim(),
@@ -3270,7 +3284,12 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     try {
       const r = await authFetch(API_URL+'/speak_test', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ voice_id: keys.elevenlabs_voice, elevenlabs_key: keys.elevenlabs.trim(), edge_voice: keys.edge_voice })
+        body: JSON.stringify({
+          voice_id: keys.elevenlabs_voice,
+          openai_key: keys.openai.trim(),
+          elevenlabs_key: keys.elevenlabs.trim(),
+          edge_voice: keys.edge_voice
+        })
       })
       const d = await r.json()
       if (d.ok && d.audio) {
@@ -3297,8 +3316,9 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
           </div>
           <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',gap:8}}>
             {[
-              {k:'has_groq',n:'Groq'},{k:'has_gemini',n:'Gemini'},{k:'has_cerebras',n:'Cerebras'},
-              {k:'has_sambanova',n:'SambaNova'},{k:'has_openrouter',n:'OpenRouter'},{k:'has_nvidia',n:'NVIDIA'},
+              {k:'has_groq',n:'Groq'},{k:'has_gemini',n:'Gemini'},{k:'has_openai',n:'OpenAI (ChatGPT)'},
+              {k:'has_cerebras',n:'Cerebras'},{k:'has_sambanova',n:'SambaNova'},{k:'has_openrouter',n:'OpenRouter'},
+              {k:'has_nvidia',n:'NVIDIA'},{k:'has_elevenlabs',n:'ElevenLabs'},
             ].map(p=>(
               <div key={p.k} style={{background:'#121212',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'6px 10px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#ffffff',fontFamily:'monospace'}}>
                 <div style={{width:8,height:8,borderRadius:'50%',background:(cloudStatus?.[p.k] || serverCfg?.[p.k])?'#4ade80':'#666666'}} />
@@ -3457,15 +3477,16 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
           {/* Diğer Sağlayıcı Anahtarları */}
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:10}}>
-              DİĞER MODEL SAĞLAYICI ANAHTARLARI
+              DİĞER MODEL SAĞLAYICI VE SES ANAHTARLARI
             </div>
             <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10}}>
               {[
+                {k:'openai',h:'has_openai',p:'OpenAI Key (sk-... ChatGPT Sesi)'},
+                {k:'elevenlabs',h:'has_elevenlabs',p:'ElevenLabs Key (sk_...)'},
                 {k:'cerebras',h:'has_cerebras',p:'Cerebras Key (csk_...)'},
                 {k:'nvidia',h:'has_nvidia',p:'NVIDIA NIM Key (nvapi-...)'},
                 {k:'sambanova',h:'has_sambanova',p:'SambaNova Key (sk_-)'},
                 {k:'openrouter',h:'has_openrouter',p:'OpenRouter Key (sk-or-...)'},
-                {k:'elevenlabs',h:'has_elevenlabs',p:'ElevenLabs Key (sk_...)'},
               ].map(f=>(
                 <div key={f.k} style={{position:'relative',display:'flex',flexDirection:'column'}}>
                   <input
@@ -3485,7 +3506,7 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
 
           {/* Ses Motoru Seçimi */}
           <div>
-            <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ELEVENLABS SESİ & TEST</div>
+            <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>CHATGPT & ELEVENLABS SESİ (Birebir İnsan Doğallığı)</div>
             <div style={{display:'flex',gap:10,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
               <select style={{...iStyle,flex:'1 1 200px'}} value={keys.elevenlabs_voice} onChange={e=>setKeys(p=>({...p,elevenlabs_voice:e.target.value}))}>
                 {VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
@@ -3494,7 +3515,7 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
                 {testing ? 'ÇALINIYOR...' : '▶ SESİ TEST ET'}
               </button>
             </div>
-            <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ÜCRETSİZ SES (Edge-TTS - ElevenLabs yoksa kullanılır)</div>
+            <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ÜCRETSİZ SES (Edge-TTS - ChatGPT / ElevenLabs yoksa kullanılır)</div>
             <select style={iStyle} value={keys.edge_voice} onChange={e=>setKeys(p=>({...p,edge_voice:e.target.value}))}>
               {EDGE_VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
             </select>
