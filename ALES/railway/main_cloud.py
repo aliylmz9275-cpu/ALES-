@@ -39,7 +39,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 # ─── backend/ MODULLERINI REUSE ET ────────────────────────────────
 # multi_agent.py ve conversations.py masaustu backend'i icin yazildi ama
@@ -49,6 +49,16 @@ from fastapi.responses import JSONResponse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 import multi_agent  # noqa: E402
 import conversations as conv_store  # noqa: E402
+
+try:
+    import telemetry
+except Exception as _e:
+    telemetry = None
+
+try:
+    import document_generator
+except Exception as _e:
+    document_generator = None
 
 # ─── AYARLAR ───────────────────────────────────────────────────────
 ACCESS_KEY = os.environ.get("ALES_ACCESS_KEY", "").strip()
@@ -129,6 +139,11 @@ async def chat_waterfall(history: list):
     errors = []
     for name, caller in _PROVIDER_CHAIN:
         ok, text = await caller(prompt, sys_prompt)
+        if telemetry:
+            try:
+                telemetry.record_api_call(name, ok)
+            except Exception:
+                pass
         if ok:
             note = f" (⚠️ {', '.join(errors)} basarisizdi, {name} ile devam edildi)" if errors else ""
             return text, (note or None)
@@ -498,6 +513,35 @@ async def approvals_stub():
 @app.get("/voices")
 async def voices_stub():
     return {"voices": [], "current": None, "note": "TTS cloud modunda henuz desteklenmiyor."}
+
+@app.get("/api/download/pdf/{filename}")
+async def download_pdf_endpoint(filename: str):
+    """Oluşturulan PDF belgesini indirir."""
+    if document_generator is None:
+        raise HTTPException(status_code=500, detail="Belge üretim modülü aktif değil")
+    p = document_generator.get_pdf_path(filename)
+    if not p or not p.exists():
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    return FileResponse(
+        path=str(p),
+        media_type="application/pdf",
+        filename=p.name
+    )
+
+@app.get("/api/telemetry")
+async def get_telemetry_endpoint():
+    """Sistem performans ve başarı metriklerini döner."""
+    if telemetry is None:
+        return {"ok": False, "error": "Telemetri modülü aktif değil"}
+    return {"ok": True, "data": telemetry.get_metrics()}
+
+@app.post("/api/telemetry/reset")
+async def reset_telemetry_endpoint():
+    """Telemetri sayaçlarını sıfırlar."""
+    if telemetry is None:
+        return {"ok": False, "error": "Telemetri modülü aktif değil"}
+    telemetry.reset_metrics()
+    return {"ok": True, "message": "Metrikler sıfırlandı"}
 
 # ─── FRONTEND'I STATIK DOSYA OLARAK SUN (ayni deployment'tan tek URL) ──
 if DIST_DIR.exists():

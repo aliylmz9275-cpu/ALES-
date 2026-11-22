@@ -1,16 +1,18 @@
 """
-experience_learner.py — ALES Deneyim & Hata Öğrenme Modülü (Faz 4).
+experience_learner.py — ALES Deneyim & Hata Öğrenme Modülü (Faz 4 & Mimari Güçlendirme).
 
 Görev yürütme sırasında (Executor) ardışık veya tekrarlanan hataları izler.
 Bir görev 2 veya daha fazla kez aynı hatayla başarısız olduğunda, hatanın
 nedenini analiz ederek kural çıkarır ve %APPDATA%\\ALES\\learned_rules.json
 dosyasına kaydeder.
 
-Bu kurallar daha sonra:
-  1) Manager Agent'a istem oluşturulurken bildirilir (geçmiş hatalardan kaçınma).
-  2) Executor Agent'a subtask yürütülürken ipucu olarak verilir.
-  3) ALES genel sistem istemine (main.py BASE_SYSTEM) otomatik dahil edilir.
+PROMPT ŞİŞMESİNİ ÖNLEME (Prompt Pruning & Scoring):
+  - Her kural bir 'score' (puan), 'success_rate' (başarı oranı) ve 'last_used' (son kullanım) taşır.
+  - 30 gün boyunca kullanılmayan kurallar otomatik silinir.
+  - Negatif skora düşen (hatayı çözmeyen/zararlı) kurallar silinir.
+  - Sistem istemine (main.py) SADECE en yüksek puanlı İLK 5 (Top 5) kural enjekte edilir.
 """
+
 import json
 import os
 import re
@@ -23,7 +25,10 @@ from config_manager import get_appdata_dir
 
 RULES_FILE = get_appdata_dir() / "learned_rules.json"
 
-_MAX_RULES = 50
+_MAX_RULES = 30
+_MAX_PROMPT_RULES = 5
+_EXPIRATION_DAYS = 30.0  # 30 gün boyunca kullanılmayan kural silinir
+
 
 def _normalize_error(err: str) -> str:
     """Hata mesajını sayılardan ve dinamik adreslerden arındırıp temel kalıbı çıkarır."""
@@ -65,11 +70,73 @@ def save_data(data: dict) -> bool:
         return False
 
 
+def prune_rules() -> List[Dict]:
+    """
+    Bayatlamış (30+ gün kullanılmayan) veya negatif puanlı kuralları temizler.
+    Temizlenmiş kural listesini döner.
+    """
+    data = load_data()
+    rules = data.get("rules", [])
+    now = time.time()
+    cutoff_time = now - (_EXPIRATION_DAYS * 86400.0)
+
+    survived = []
+    pruned_count = 0
+
+    for r in rules:
+        last_used = float(r.get("last_used", now))
+        score = float(r.get("score", 1.0))
+
+        # 30 gün kullanılmadıysa veya negatif puandaysa sil
+        if last_used < cutoff_time:
+            pruned_count += 1
+            continue
+        if score < 0:
+            pruned_count += 1
+            continue
+
+        survived.append(r)
+
+    if pruned_count > 0:
+        data["rules"] = survived
+        save_data(data)
+        print(f"[EXPERIENCE_LEARNER] {pruned_count} adet bayat/verimsiz kural temizlendi (Pruning).")
+
+    return survived
+
+
+def record_rule_outcome(action: str, success: bool):
+    """Kuralın başarılı bir göreve katkısını veya başarısızlığını puanlar."""
+    if not action:
+        return
+    data = load_data()
+    rules = data.get("rules", [])
+    modified = False
+    now = time.time()
+
+    for r in rules:
+        if r.get("action", "").lower() == action.lower():
+            r["last_used"] = now
+            if success:
+                r["success_count"] = r.get("success_count", 0) + 1
+                r["score"] = round(r.get("score", 1.0) + 1.0, 2)
+            else:
+                r["failure_count"] = r.get("failure_count", 0) + 1
+                r["score"] = round(r.get("score", 1.0) - 1.5, 2)
+
+            total = r.get("success_count", 0) + r.get("failure_count", 0)
+            if total > 0:
+                r["success_rate"] = round(r.get("success_count", 0) / total, 2)
+            modified = True
+
+    if modified:
+        save_data(data)
+
+
 def record_failure(action: str, error_msg: str, context: str = "") -> Optional[str]:
     """
     Bir eylemin başarısızlığını kaydeder.
     Aynı (action, error_signature) 2+ kez oluşursa otomatik bir kural üretip kaydeder.
-    Yeni kural üretilirse kural metnini döner, aksi halde None döner.
     """
     if not action or not error_msg:
         return None
@@ -91,7 +158,6 @@ def record_failure(action: str, error_msg: str, context: str = "") -> Optional[s
     new_rule = None
     # 2 veya daha fazla başarısızlık -> kural oluştur
     if entry["count"] >= 2:
-        # Daha önce bu imza için kural yazılmış mı kontrol et
         existing = any(r.get("signature") == sig_key for r in rules)
         if not existing:
             rule_text = _generate_rule_text(action, error_msg, context)
@@ -101,6 +167,11 @@ def record_failure(action: str, error_msg: str, context: str = "") -> Optional[s
                 "action": action,
                 "rule": rule_text,
                 "trigger_count": entry["count"],
+                "score": 1.0,
+                "success_count": 0,
+                "failure_count": 0,
+                "success_rate": 1.0,
+                "last_used": time.time(),
                 "created_at": datetime.now().isoformat(),
             }
             rules.append(rule_obj)
@@ -135,20 +206,42 @@ def _generate_rule_text(action: str, error_msg: str, context: str) -> str:
 
 
 def load_rules() -> List[Dict]:
-    """Kayıtlı tüm kuralları listeler."""
-    data = load_data()
-    return data.get("rules", [])
+    """Kayıtlı ve elenmiş tüm kuralları listeler."""
+    return prune_rules()
 
 
-def get_rules_prompt() -> str:
-    """Promptlara enjekte edilmek üzere kuralları metin olarak döner."""
-    rules = load_rules()
-    if not rules:
+def get_top_rules(limit: int = _MAX_PROMPT_RULES) -> List[Dict]:
+    """
+    En yüksek puanlı ve en güncel kuralları sıralayarak döner.
+    Varsayılan limit: 5 (Prompt şişmesini engeller).
+    """
+    active_rules = prune_rules()
+    if not active_rules:
+        return []
+
+    # Puan (azalan), Başarı oranı (azalan), Son kullanım (azalan)
+    sorted_rules = sorted(
+        active_rules,
+        key=lambda r: (float(r.get("score", 1.0)), float(r.get("success_rate", 1.0)), float(r.get("last_used", 0))),
+        reverse=True
+    )
+    return sorted_rules[:limit]
+
+
+def get_rules_prompt(limit: int = _MAX_PROMPT_RULES) -> str:
+    """
+    Sistem istemine (system prompt) enjekte edilmek üzere SADECE Top 5 kuralı metinleştirir.
+    Prompt'un gereksiz büyümesini engeller.
+    """
+    top = get_top_rules(limit)
+    if not top:
         return ""
 
-    lines = ["\n[GEÇMİŞ DENEYİMLERDEN ÖĞRENİLEN DERSLER VE KURALLAR]:"]
-    for r in rules[-10:]:  # Son 10 güncel kural
-        lines.append(f"• ({r.get('action', 'genel')}): {r.get('rule')}")
+    lines = ["\n[GEÇMİŞ DENEYİMLERDEN ÖĞRENİLEN EN YÜKSEK PUANLI KURALLAR (Top 5)]:"]
+    for r in top:
+        score = r.get("score", 1.0)
+        rate = int(float(r.get("success_rate", 1.0)) * 100)
+        lines.append(f"• ({r.get('action', 'genel')} | Güven: %{rate}): {r.get('rule')}")
     lines.append("Bu kurallara dikkat et ve geçmişte yaşanan bu hataları tekrarlama.\n")
     return "\n".join(lines)
 

@@ -26,23 +26,37 @@ try:
 except Exception:
     _CACHE_DB = Path("semantic_cache.sqlite3")
 
+try:
+    import telemetry
+except Exception:
+    telemetry = None
+
 # ─── EYLEM VE ZAMANA DUYARLI KELİMELER ──────────────────────────────
+# Eylem ve emir gövdeleri — herhangi bir çekim eki veya olumsuzluk alsa bile yakalar
+_ACTION_STEM_PATTERNS = [
+    re.compile(r"\b(ac|aç|kapat|sil|calis|çalış|tikla|tıkla|yaz|gonder|gönder|basla|başla|durdur|kaydet|yukle|yükle|indir|kur|tasi|taşı|degis|değiş|guncel|güncel)\w*", re.I),
+    re.compile(r"\b(open|close|delete|remov|run|execut|launch|start|stop|click|type|press|creat|kill|write|send|sav)\w*", re.I),
+    re.compile(r"\b(sakın|sakin|yapma|etme|silme|açma|acma|kapatma|basma|tıklama|tiklama|yazma|don'?t|not|never|no)\b", re.I),
+]
+
 _ACTION_WORDS = {
     "takip", "follow", "begen", "like", "paylas", "share",
     "repost", "yorum", "comment", "gonder", "send", "dm", "mesaj",
-    "ac", "kapat", "close", "open", "sil", "delete", "kaldir",
+    "ac", "aç", "kapat", "close", "open", "sil", "delete", "kaldir",
     "remove", "olustur", "create", "yaz", "write", "kaydet", "save",
     "indir", "download", "yukle", "upload", "kur", "install",
-    "calistir", "run", "execute", "launch", "baslat",
-    "durdur", "stop", "tikla", "click", "tasi", "move",
-    "degistir", "change", "guncelle", "update",
+    "calistir", "çalıştır", "run", "execute", "launch", "baslat", "başlat",
+    "durdur", "stop", "tikla", "tıkla", "click", "tasi", "taşı", "move",
+    "degistir", "değiştir", "change", "guncelle", "güncelle", "update",
     "ekle", "add", "cek", "screenshot", "ekran", "goruntu",
     "otomasyon", "otomatik", "pipeline", "gorev", "feed",
 }
 
 _ACTION_PHRASES = [
     "takip et", "follow", "begen", "yorum yap", "dm at", "mesaj at",
-    "ekran goruntusu", "dosyayi ac", "uygulamayi ac", "open app",
+    "ekran goruntusu", "ekran görüntüsü", "dosyayi ac", "dosyayı aç",
+    "dosyayi sil", "dosyayı sil", "uygulamayi ac", "uygulamayı aç", "open app",
+    "delete file", "remove file", "don't delete", "do not delete", "sakın silme",
 ]
 
 _VOLATILE_WORDS = {
@@ -77,15 +91,28 @@ def is_cacheable(prompt: str) -> Tuple[bool, str]:
         return False, "cok kisa"
     raw = prompt.strip()
     low = raw.translate(_TR).casefold()
+
+    # 1. URL, Etiket veya Dosya Yolu Kontrolü
     if _URL_RE.search(raw):
         return False, "URL iceriyor"
     if _MENTION_RE.search(raw):
         return False, "@kullanici iceriyor"
     if _PATH_RE.search(raw):
         return False, "dosya yolu iceriyor"
+
+    # 2. Tam Aksiyon İfadeleri
     for ph in _ACTION_PHRASES:
-        if ph in low:
+        if ph in low or ph in raw.lower():
             return False, f"aksiyon ifadesi: '{ph}'"
+
+    # 3. Kök ve Ek Düzeyinde Eylem/Emir ve Olumsuzluk Kalıpları
+    # (Ör: 'sil', 'silme', 'aç', 'açma', 'kapat', 'çalıştır', 'tıkla', 'yaz', 'don't delete')
+    for pat in _ACTION_STEM_PATTERNS:
+        m = pat.search(low) or pat.search(raw)
+        if m:
+            return False, f"eylem/olumsuzluk kalıbı: '{m.group(0)}'"
+
+    # 4. Kelime Kümesi Eşleşmesi
     norm = _normalize(prompt)
     toks = set(norm.split())
     hit = toks & _ACTION_WORDS
@@ -173,6 +200,8 @@ class SemanticCache:
         """
         ok, _ = is_cacheable(prompt)
         if not ok:
+            if telemetry:
+                telemetry.record_cache(bypass=True)
             return None
 
         norm = _normalize(prompt)
@@ -192,6 +221,8 @@ class SemanticCache:
                         cid, matched_p, ans, c_ts, hits = row
                         conn.execute("UPDATE semantic_cache SET hits = hits + 1 WHERE id = ?", (cid,))
                         self.stats["hits"] += 1
+                        if telemetry:
+                            telemetry.record_cache(hit=True)
                         return {
                             "answer": ans,
                             "similarity": 1.0,
@@ -223,6 +254,8 @@ class SemanticCache:
                         cid, matched_p, ans, c_ts = best_match
                         conn.execute("UPDATE semantic_cache SET hits = hits + 1 WHERE id = ?", (cid,))
                         self.stats["hits"] += 1
+                        if telemetry:
+                            telemetry.record_cache(hit=True)
                         return {
                             "answer": ans,
                             "similarity": round(best_sim, 4),
@@ -234,6 +267,8 @@ class SemanticCache:
                 print(f"[SEMANTIC_CACHE] Sorgu hatası: {e}")
 
         self.stats["misses"] += 1
+        if telemetry:
+            telemetry.record_cache(miss=True)
         return None
 
     def put(self, prompt: str, answer: str, namespace: str = "") -> bool:
@@ -241,6 +276,8 @@ class SemanticCache:
         ok, _ = is_cacheable(prompt)
         if not ok or not (answer or "").strip():
             self.stats["skipped"] += 1
+            if telemetry and not ok:
+                telemetry.record_cache(bypass=True)
             return False
 
         norm = _normalize(prompt)

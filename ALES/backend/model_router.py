@@ -361,6 +361,11 @@ async def _call_layer(layer: dict, messages: list, timeout: float,
             if adaptive_timeouts is not None:
                 adaptive_timeouts.record_latency(lname, out["elapsed"], success=True)
                 adaptive_timeouts.record_latency(provider, out["elapsed"], success=True)
+            try:
+                import telemetry
+                telemetry.record_api_call(provider, True, out["elapsed"])
+            except Exception:
+                pass
 
             return out
         except asyncio.TimeoutError:
@@ -369,6 +374,11 @@ async def _call_layer(layer: dict, messages: list, timeout: float,
                 self_heal.report_provider_failure(provider, f"timeout ({timeout}s)")
             if adaptive_timeouts is not None:
                 adaptive_timeouts.record_latency(lname, time.time() - t0, success=False)
+            try:
+                import telemetry
+                telemetry.record_api_call(provider, False, time.time() - t0)
+            except Exception:
+                pass
             return {"ok": False, "layer": lname, "provider": provider, "model": model,
                     "error": f"{provider}/{model}: timeout ({timeout}s)",
                     "elapsed": time.time() - t0}
@@ -408,6 +418,12 @@ async def _call_layer(layer: dict, messages: list, timeout: float,
             if healed:
                 out["healed"] = True
                 out["original_model"] = original
+            try:
+                import telemetry
+                telemetry.record_api_call(provider, False, out["elapsed"])
+            except Exception:
+                pass
+            return out
             return out
     # Buraya ULASILMAMASI gerekir (UC bayrak -> en fazla uc `continue`,
     # dorduncu tur mutlaka return eder). Yine de bir gun dongude bir tur

@@ -91,7 +91,8 @@ if _FROZEN_WINDOWED:
 
 import psutil
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pyautogui
 pyautogui.FAILSAFE = False
@@ -277,6 +278,16 @@ try:
     import auto_model_discovery
 except Exception as _e:
     auto_model_discovery = None
+try:
+    import telemetry
+except Exception as _e:
+    telemetry = None
+    print(f"[ALES] telemetry yuklenemedi: {_e}")
+try:
+    import document_generator
+except Exception as _e:
+    document_generator = None
+    print(f"[ALES] document_generator yuklenemedi: {_e}")
 
 from config_manager import (get_mode, set_mode, list_modes, get_mode_config,
                             get_system_prompt, get_key, get_council, set_council,
@@ -711,6 +722,8 @@ TOOLS = [
     {"type":"function","function":{"name":"openclaw_desktop","description":"Masaustu eylemini OpenClaw daemon'una gonder (yoksa Windows yerel yedegine duser). Eylemler: click, type, list_windows, close. NOT: ALES'in kendi list_windows/click_control/set_control_text araclari ayni isi DAHA GUVENILIR yapar - bunu sadece OpenClaw daemon'unun kendi yetenekleri gerekiyorsa kullan.","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["click","type","list_windows","close"]},"window":{"type":"string","description":"Pencere basligi"},"control":{"type":"string","description":"Denetim adi"},"text":{"type":"string"}},"required":["action"]}}},
     {"type":"function","function":{"name":"openclaw_browser","description":"Tarayici eylemini OpenClaw daemon'una gonder (yoksa yerel Playwright yedegine duser). Eylemler: goto (url), search (query). NOT: browse_web/web_search_deep dogrudan ayni isi yapar; bunu sadece daemon'un oturumu/sekmeleri gerekiyorsa kullan.","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["goto","search"]},"url":{"type":"string"},"query":{"type":"string"}},"required":["action"]}}},
     {"type":"function","function":{"name":"openclaw_terminal","description":"Kabuk (shell) komutu calistir ve cikti/hata kodunu getir - orn 'git status', 'dir', 'npm run build'. OpenClaw daemon varsa orada, yoksa yerel subprocess'te calisir. Uzun surecek komutlar icin timeout_s ver.","parameters":{"type":"object","properties":{"command":{"type":"string"},"timeout_s":{"type":"number","description":"Varsayilan 15, en fazla 120"}},"required":["command"]}}},
+    # ── Belge ve PDF Üretimi ──
+    {"type":"function","function":{"name":"generate_pdf","description":"Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'bunu pdf yap', 'belge oluştur', 'rapor hazırla ve pdf ver' dediğinde kullan.","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge başlığı"},"content":{"type":"string","description":"Markdown formatında belge içeriği"}},"required":["title","content"]}}},
 ]
 
 # ─── ACIL DURUM ARAC SETI ────────────────────────────────────────
@@ -1136,6 +1149,8 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "mcp_call_tool": lambda: mcp_connector.call_mcp_tool(args["name"], args.get("arguments", {})) if mcp_connector else "MCP kullanılamıyor",
             "mcp_read_file": lambda: mcp_connector.mcp_read_file(args["path"]) if mcp_connector else read_file(args["path"]),
             "mcp_list_directory": lambda: mcp_connector.mcp_list_directory(args.get("path", ".")) if mcp_connector else list_directory(args.get("path", ".")),
+            # PDF ve Belge Üretimi
+            "generate_pdf": lambda: json.dumps(document_generator.generate_pdf(args.get("title", "Belge"), args.get("content", "")) if document_generator else {"ok": False, "error": "PDF modülü aktif değil"}, ensure_ascii=False),
         }
         if name in tools:
             return tools[name]()
@@ -2734,6 +2749,35 @@ async def clear_learned_rules_endpoint():
         return {"ok": ok}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.get("/api/download/pdf/{filename}")
+async def download_pdf_endpoint(filename: str):
+    """Oluşturulan PDF belgesini indirir."""
+    if document_generator is None:
+        raise HTTPException(status_code=500, detail="Belge üretim modülü aktif değil")
+    p = document_generator.get_pdf_path(filename)
+    if not p or not p.exists():
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    return FileResponse(
+        path=str(p),
+        media_type="application/pdf",
+        filename=p.name
+    )
+
+@app.get("/api/telemetry")
+async def get_telemetry_endpoint():
+    """Sistem performans ve başarı metriklerini döner."""
+    if telemetry is None:
+        return {"ok": False, "error": "Telemetri modülü aktif değil"}
+    return {"ok": True, "data": telemetry.get_metrics()}
+
+@app.post("/api/telemetry/reset")
+async def reset_telemetry_endpoint():
+    """Telemetri sayaçlarını sıfırlar."""
+    if telemetry is None:
+        return {"ok": False, "error": "Telemetri modülü aktif değil"}
+    telemetry.reset_metrics()
+    return {"ok": True, "message": "Metrikler sıfırlandı"}
 
 # ─── HTTP ────────────────────────────────────────────────────────
 @app.get("/status")

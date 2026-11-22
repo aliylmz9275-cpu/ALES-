@@ -198,6 +198,23 @@ async def _verify_subtask_outcome(subtask: dict, exec_result: dict) -> dict:
     return verification
 
 
+# GUI/Masaüstü eylemleri için Mutex (Yarış durumlarını ve işletim sistemi kilitlenmelerini önler)
+_gui_mutex = asyncio.Lock()
+
+GUI_DESKTOP_TOOLS = {
+    "open_app", "type_text", "press_key", "click_at", "click_control",
+    "set_control_text", "focus_window", "close_window", "window_state",
+    "cua_action", "take_screenshot", "analyze_screen", "find_on_screen",
+    "browse_web", "playwright_browser", "native_desktop"
+}
+
+
+def is_gui_tool(tool_name: str) -> bool:
+    """Belirtilen aracın masaüstü/GUI (fare, klavye, pencere) aracı olup olmadığını belirler."""
+    tn = (tool_name or "").lower().strip()
+    return tn in GUI_DESKTOP_TOOLS or any(g in tn for g in ("click", "type", "press", "window", "mouse", "screen", "app", "playwright"))
+
+
 def _group_subtasks_into_waves(subtasks: list) -> list:
     """
     Subtask bağımlılıklarını analiz eder ve paralel yürütülebilecek dalgalar (waves) halinde gruplar.
@@ -257,10 +274,23 @@ async def _execute_and_verify_single(st: dict, tool_executor_fn, cb: Callable[[s
     """Tek bir alt görevi yürütür, çıktısını doğrular ve gerekirse kurtarma işletir."""
     s_id = st.get("id")
     desc = st.get("description", f"Adım #{s_id}")
+    tool_name = st.get("tool") or st.get("action") or ""
     cb(f"▶ [EXECUTOR {s_id}/{total_count}]: {desc}...")
 
-    # 1. Yürütme (Execute)
-    res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+    # 1. Yürütme (Execute) — GUI/Masaüstü araçları race-condition'ı önlemek için mutex ile kilitlenir
+    if is_gui_tool(tool_name):
+        async with _gui_mutex:
+            res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+    else:
+        res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+
+    # Telemetri kaydı
+    try:
+        import telemetry
+        if is_gui_tool(tool_name):
+            telemetry.record_gui_action(tool_name, res.get("success", False))
+    except Exception:
+        pass
 
     # 2. Doğrulama (Verify)
     verify = await _verify_subtask_outcome(st, res)
@@ -270,9 +300,21 @@ async def _execute_and_verify_single(st: dict, tool_executor_fn, cb: Callable[[s
     if verify["needs_retry"] and verify["recovery_subtask"]:
         cb(f"🔄 [MANAGER]: Adım #{s_id} başarısız oldu. Kurtarma deneniyor...")
         rec_st = verify["recovery_subtask"]
-        await executor_agent.execute_subtask(rec_st, tool_executor_fn=tool_executor_fn)
+        rec_tool = rec_st.get("tool") or rec_st.get("action") or ""
+
+        if is_gui_tool(rec_tool):
+            async with _gui_mutex:
+                await executor_agent.execute_subtask(rec_st, tool_executor_fn=tool_executor_fn)
+        else:
+            await executor_agent.execute_subtask(rec_st, tool_executor_fn=tool_executor_fn)
+
         cb(f"🔁 [EXECUTOR]: Adım #{s_id} yeniden yürütülüyor...")
-        retry_res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+        if is_gui_tool(tool_name):
+            async with _gui_mutex:
+                retry_res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+        else:
+            retry_res = await executor_agent.execute_subtask(st, tool_executor_fn=tool_executor_fn)
+
         if retry_res["success"]:
             res = retry_res
             res["recovered"] = True
@@ -361,4 +403,9 @@ async def run_goal(
 
     final_report = "\n".join(report_lines)
     screen_streamer.log_activity(f"Hedef tamamlandı ({status_icon})", level="SUCCESS" if not has_failure else "WARN")
+    try:
+        import telemetry
+        telemetry.record_task(not has_failure)
+    except Exception:
+        pass
     return final_report

@@ -35,6 +35,89 @@ function authFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers })
 }
 
+// Mesaj içeriğindeki PDF ve bağlantıları şık indirme kartlarına dönüştürür
+function renderMessageContent(text) {
+  if (!text || typeof text !== 'string') return text
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s)]+|\/api\/download\/pdf\/[^\s)]+)/g
+  if (!linkRegex.test(text)) return text
+
+  const parts = []
+  let lastIndex = 0
+  let match
+  linkRegex.lastIndex = 0
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index))
+    }
+    const label = match[1] || match[3]
+    let url = match[2] || match[3]
+    const fullUrl = url.startsWith('/') && !url.startsWith('//') ? `${API_URL}${url}` : url
+    const isPdf = url.toLowerCase().includes('.pdf') || url.includes('/api/download/pdf/')
+
+    if (isPdf) {
+      parts.push(
+        <a
+          key={match.index}
+          href={fullUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            color: '#fca5a5',
+            padding: '4px 10px',
+            borderRadius: 6,
+            textDecoration: 'none',
+            fontWeight: 600,
+            fontSize: 13,
+            margin: '4px 2px',
+            verticalAlign: 'middle',
+            transition: 'all 0.15s'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'
+            e.currentTarget.style.color = '#ffffff'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'
+            e.currentTarget.style.color = '#fca5a5'
+          }}
+        >
+          <span>📄</span>
+          <span>{label}</span>
+          <span style={{ fontSize: 11, opacity: 0.8 }}>⬇ İndir</span>
+        </a>
+      )
+    } else {
+      parts.push(
+        <a
+          key={match.index}
+          href={fullUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#60a5fa',
+            textDecoration: 'underline',
+            wordBreak: 'break-all'
+          }}
+        >
+          {label}
+        </a>
+      )
+    }
+    lastIndex = linkRegex.lastIndex
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex))
+  }
+  return parts
+}
+
 // ElevenLabs cok-dilli (Turkce dahil) dogal sesler - voice.py ile ayni liste
 const VOICE_OPTIONS = [
   { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam - Derin Erkek (JARVIS tarzi)' },
@@ -595,6 +678,11 @@ export default function App() {
   })
   const autoSpeakRef = useRef(autoSpeak)
   useEffect(() => { autoSpeakRef.current = autoSpeak }, [autoSpeak])
+  useEffect(() => {
+    if (isCloud && tab === 'live') {
+      setTab('chat')
+    }
+  }, [tab])
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [streamFrame, setStreamFrame] = useState(null)
   const [streamActive, setStreamActive] = useState(false)
@@ -1407,6 +1495,28 @@ export default function App() {
         ))}
       </div>}
 
+      {/* CLOUD LIMITATION BANNER (TASK 4) */}
+      {isCloud && (
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.12)',
+          borderBottom: '1px solid rgba(59, 130, 246, 0.3)',
+          padding: '8px 16px',
+          color: '#93c5fd',
+          fontSize: 12,
+          fontFamily: 'monospace',
+          textAlign: 'center',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          lineHeight: 1.4
+        }}>
+          <span>🌐</span>
+          <span><b>Bulut Modu:</b> Sadece sohbet, analiz ve belge oluşturma aktiftir. Masaüstü kontrolü için yerel EXE'yi kullanın.</span>
+        </div>
+      )}
+
       {/* TABS */}
       <div className="app-tabs-bar" style={{display:'flex',alignItems:'center',padding:'0 12px',background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,height:40,gap:6,overflowX:'auto',whiteSpace:'nowrap',maxWidth:'100vw'}}>
         {[
@@ -1415,10 +1525,11 @@ export default function App() {
           {id:'log',label:'LOG'},
           {id:'worldview',label:'DÜNYA'},
           {id:'tasks',label:'GÖREV'},
-          {id:'live',label:'CANLI İZLE'},
+          ...(!isCloud ? [{id:'live',label:'CANLI İZLE'}] : []),
           {id:'memory',label:'HAFIZA'},
           {id:'stats',label:'PANO'},
           {id:'status',label:'DURUM'},
+          {id:'metrics',label:'METRİKLER'},
           {id:'settings',label:'AYARLAR'},
           {id:'advanced',label:'GELİŞMİŞ'},
         ].map(t=>(
@@ -1441,7 +1552,7 @@ export default function App() {
             <div key={m.id} style={{display:'flex',alignItems:'flex-end',gap:8,animation:'fadeUp .2s ease',justifyContent:m.role==='user'?'flex-end':'flex-start'}}>
               {m.role!=='user' && <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#222222,#444444)',border:'1px solid rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#ffffff',flexShrink:0,fontFamily:'monospace'}}>A</div>}
               <div className="chat-message-bubble" style={{maxWidth:'82%',padding:'10px 14px',borderRadius:12,fontSize:14,lineHeight:1.6,whiteSpace:'pre-wrap',wordBreak:'break-word',...(m.role==='user'?{background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.18)',color:'#ffffff',borderBottomRightRadius:3}:m.role==='error'?{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:'#f87171',borderBottomLeftRadius:3}:{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.15)',color:'#E4E4E7',borderBottomLeftRadius:3})}}>
-                {m.content}
+                {renderMessageContent(m.content)}
               </div>
               {m.role!=='user' && (
                 <button
@@ -2095,6 +2206,7 @@ export default function App() {
         </div>}
 
         {tab==='status' && <StatusPanel />}
+        {tab==='metrics' && <MetricsPanel />}
         {tab==='settings' && (
           <div style={{height:'100%',overflowY:'auto',padding:'16px 20px',background:'#121212',color:'#E4E4E7'}}>
             <SettingsPanel isTab={true} onClose={()=>setTab('chat')} pendingSkills={skillProposals} onSkillsChange={setSkillProposals} autoSpeak={autoSpeak} onAutoSpeakChange={setAutoSpeak} />
@@ -2486,6 +2598,240 @@ function StatusPanel() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+function MetricsPanel() {
+  const [metrics, setMetrics] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [resetting, setResetting] = useState(false)
+
+  const loadMetrics = useCallback(async () => {
+    setLoading(true)
+    setErr('')
+    try {
+      const res = await authFetch(API_URL + '/api/telemetry')
+      const json = await res.json()
+      if (json.ok && json.data) {
+        setMetrics(json.data)
+      } else {
+        setErr(json.error || 'Metrik bilgisi okunamadı')
+      }
+    } catch (e) {
+      setErr('Backend sunucusuna ulaşılamadı')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadMetrics()
+    const timer = setInterval(loadMetrics, 5000)
+    return () => clearInterval(timer)
+  }, [loadMetrics])
+
+  const handleReset = async () => {
+    if (!confirm('Tüm telemetri sayaçlarını sıfırlamak istediğinize emin misiniz?')) return
+    setResetting(true)
+    try {
+      await authFetch(API_URL + '/api/telemetry/reset', { method: 'POST' })
+      await loadMetrics()
+    } catch (e) {
+      alert('Sıfırlama hatası')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const summary = metrics?.summary || {}
+  const apiProviders = metrics?.api || {}
+  const cache = metrics?.cache || {}
+  const gui = metrics?.gui || {}
+  const tasks = metrics?.tasks || {}
+
+  return (
+    <div style={{height:'100%',overflowY:'auto',padding:'16px 20px',background:'#121212',color:'#E4E4E7',lineHeight:1.5}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:20}}>
+        <div>
+          <div style={{fontSize:16,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2}}>
+            SİSTEM PERFORMANS VE BAŞARI METRİKLERİ
+          </div>
+          <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginTop:4}}>
+            Model çağrıları, önbellek etkinliği, GUI etkileşimleri ve görev başarı oranları
+          </div>
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button
+            onClick={loadMetrics}
+            disabled={loading}
+            style={{padding:'6px 14px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.2)',color:'#ffffff',borderRadius:6,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}
+          >
+            {loading ? 'YENİLENİYOR...' : '↻ YENİLE'}
+          </button>
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            style={{padding:'6px 14px',background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:'#f87171',borderRadius:6,fontFamily:'monospace',fontSize:12,cursor:'pointer'}}
+          >
+            {resetting ? 'SIFIRLANIYOR...' : 'SAYAÇLARI SIFIRLA'}
+          </button>
+        </div>
+      </div>
+
+      {err && (
+        <div style={{background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',color:'#f87171',padding:'12px 16px',borderRadius:8,marginBottom:16,fontFamily:'monospace',fontSize:13}}>
+          ⚠️ {err}
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(210px, 1fr))',gap:14,marginBottom:24}}>
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontFamily:'monospace',color:'#A1A1AA'}}>GENEL API BAŞARISI</div>
+          <div style={{fontSize:28,fontWeight:700,fontFamily:'monospace',color:summary.overall_api_rate_pct >= 90 ? '#4ade80' : '#f59e0b',marginTop:6}}>
+            %{summary.overall_api_rate_pct ?? 100}
+          </div>
+          <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginTop:4}}>
+            Toplam: {summary.total_api_calls ?? 0} çağrı
+          </div>
+        </div>
+
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontFamily:'monospace',color:'#A1A1AA'}}>ÖNBELLEK İSABET ORANI</div>
+          <div style={{fontSize:28,fontWeight:700,fontFamily:'monospace',color:'#60a5fa',marginTop:6}}>
+            %{cache.hit_rate_pct ?? 0}
+          </div>
+          <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginTop:4}}>
+            {cache.hits ?? 0} isabet / {cache.misses ?? 0} ıskalama
+          </div>
+        </div>
+
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontFamily:'monospace',color:'#A1A1AA'}}>AKSİYON KORUMASI (BAYPAS)</div>
+          <div style={{fontSize:28,fontWeight:700,fontFamily:'monospace',color:'#f59e0b',marginTop:6}}>
+            {cache.bypasses ?? 0}
+          </div>
+          <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginTop:4}}>
+            Kritik komutlar önbellekten korundu
+          </div>
+        </div>
+
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontFamily:'monospace',color:'#A1A1AA'}}>MASAÜSTÜ / GUI BAŞARISI</div>
+          <div style={{fontSize:28,fontWeight:700,fontFamily:'monospace',color:gui.rate_pct >= 90 ? '#4ade80' : '#f87171',marginTop:6}}>
+            %{gui.rate_pct ?? 100}
+          </div>
+          <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginTop:4}}>
+            {gui.success ?? 0} başarılı / {gui.fail ?? 0} hata
+          </div>
+        </div>
+      </div>
+
+      {/* Grid: Providers & Details */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(360px, 1fr))',gap:16}}>
+        {/* Model Providers */}
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:18}}>
+          <div style={{fontSize:14,fontWeight:700,fontFamily:'monospace',color:'#ffffff',marginBottom:14}}>
+            MODEL SAĞLAYICILARI PERFORMANSI
+          </div>
+          {Object.keys(apiProviders).length === 0 ? (
+            <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',padding:'16px 0'}}>
+              Henüz API çağrısı kaydedilmedi.
+            </div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {Object.entries(apiProviders).map(([prov, p]) => (
+                <div key={prov} style={{background:'#121212',border:'1px solid rgba(255,255,255,0.08)',borderRadius:8,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{fontWeight:600,color:'#ffffff',fontSize:13}}>{prov}</div>
+                    <div style={{fontSize:11,color:'#A1A1AA',fontFamily:'monospace',marginTop:2}}>
+                      {p.success} başarılı · {p.fail} başarısız · ort. {p.avg_latency_s}s
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <span style={{
+                      display:'inline-block',
+                      padding:'3px 10px',
+                      borderRadius:6,
+                      fontSize:13,
+                      fontWeight:700,
+                      fontFamily:'monospace',
+                      background: p.rate_pct >= 90 ? 'rgba(74,222,128,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: p.rate_pct >= 90 ? '#4ade80' : '#f87171',
+                      border: `1px solid ${p.rate_pct >= 90 ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`
+                    }}>
+                      %{p.rate_pct}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* GUI Tools Breakdown */}
+        <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.12)',borderRadius:10,padding:18}}>
+          <div style={{fontSize:14,fontWeight:700,fontFamily:'monospace',color:'#ffffff',marginBottom:14}}>
+            GUI VE MASAÜSTÜ ARAÇ AYRINTILARI
+          </div>
+          {(!gui.tools || Object.keys(gui.tools).length === 0) ? (
+            <div style={{fontSize:13,color:'#A1A1AA',fontFamily:'monospace',padding:'16px 0'}}>
+              Henüz GUI/Masaüstü eylemi kaydedilmedi.
+            </div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {Object.entries(gui.tools).map(([toolName, t]) => {
+                const total = (t.success || 0) + (t.fail || 0);
+                const rate = total > 0 ? Math.round((t.success / total) * 100) : 100;
+                return (
+                  <div key={toolName} style={{background:'#121212',border:'1px solid rgba(255,255,255,0.08)',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <span style={{fontFamily:'monospace',color:'#ffffff',fontSize:13}}>{toolName}</span>
+                      <div style={{fontSize:11,color:'#A1A1AA',fontFamily:'monospace'}}>
+                        {t.success} başarılı · {t.fail} başarısız
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize:12,
+                      fontFamily:'monospace',
+                      fontWeight:600,
+                      color: rate >= 90 ? '#4ade80' : '#f87171'
+                    }}>
+                      %{rate}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Manager Tasks */}
+          <div style={{marginTop:18,paddingTop:14,borderTop:'1px solid rgba(255,255,255,0.08)'}}>
+            <div style={{fontSize:13,fontWeight:700,fontFamily:'monospace',color:'#ffffff',marginBottom:8}}>
+              GÖREV VE HEDEF YÖNETİMİ
+            </div>
+            <div style={{background:'#121212',border:'1px solid rgba(255,255,255,0.08)',borderRadius:8,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{color:'#ffffff',fontSize:13,fontWeight:500}}>Manager-Executor Başarısı</div>
+                <div style={{fontSize:11,color:'#A1A1AA',fontFamily:'monospace',marginTop:2}}>
+                  {tasks.success ?? 0} tamamlandı · {tasks.fail ?? 0} başarısız
+                </div>
+              </div>
+              <span style={{
+                fontSize:14,
+                fontFamily:'monospace',
+                fontWeight:700,
+                color: (tasks.rate_pct ?? 100) >= 90 ? '#4ade80' : '#f87171'
+              }}>
+                %{tasks.rate_pct ?? 100}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
