@@ -768,6 +768,25 @@ export default function App() {
   const audioQueueRef = useRef([])
   const audioPlayingRef = useRef(false)
   const audioElRef = useRef(null)
+  const audioUnlockedRef = useRef(false)
+  const [audioBlocked, setAudioBlocked] = useState(false)
+  const lastAssistantMsgRef = useRef('')
+
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (AudioCtx) {
+        const ctx = new AudioCtx()
+        if (ctx.state === 'suspended') ctx.resume()
+      }
+      const silent = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA")
+      silent.play().then(() => {
+        audioUnlockedRef.current = true
+        setAudioBlocked(false)
+      }).catch(() => {})
+    } catch (e) {}
+  }, [])
 
   useEffect(() => { const t = setInterval(()=>setTime(new Date()),1000); return ()=>clearInterval(t) }, [])
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:'smooth'}) }, [messages, activeTools])
@@ -850,6 +869,12 @@ export default function App() {
 
   const playTTS = useCallback(async (text) => {
     if (!text) return
+    unlockAudio()
+    if (audioElRef.current) {
+      try { audioElRef.current.pause() } catch {}
+      audioElRef.current = null
+    }
+    setSpeaking(true)
     try {
       const res = await authFetch(`${API_URL}/speak`, {
         method: 'POST',
@@ -858,21 +883,35 @@ export default function App() {
       })
       const d = await res.json()
       if (d.ok && d.audio) {
-        if (audioElRef.current) {
-          try { audioElRef.current.pause() } catch {}
-        }
         const audio = new Audio(`data:${d.mime || 'audio/mpeg'};base64,${d.audio}`)
         audioElRef.current = audio
-        setSpeaking(true)
-        audio.onended = () => setSpeaking(false)
-        audio.onerror = () => setSpeaking(false)
-        await audio.play().catch(() => {})
+        audio.onended = () => {
+          setSpeaking(false)
+          audioElRef.current = null
+        }
+        audio.onerror = () => {
+          setSpeaking(false)
+          audioElRef.current = null
+        }
+        const playPromise = audio.play()
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            audioUnlockedRef.current = true
+            setAudioBlocked(false)
+          }).catch((err) => {
+            console.warn("Autoplay tarayıcı tarafından duraklatıldı:", err)
+            setAudioBlocked(true)
+            setSpeaking(false)
+          })
+        }
+      } else {
+        setSpeaking(false)
       }
     } catch (err) {
       console.warn("playTTS hatasi:", err)
       setSpeaking(false)
     }
-  }, [])
+  }, [unlockAudio])
 
   const stopListening = () => {
     if (recRef.current) {
@@ -899,7 +938,16 @@ export default function App() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaStreamRef.current = stream
       const chunks = []
-      const mimeType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : 'audio/mp4'
+      let mimeType = 'audio/webm'
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus'
+        } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm'
+        } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4'
+        }
+      }
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       mediaRecorderRef.current = recorder
 
@@ -911,11 +959,15 @@ export default function App() {
 
       recorder.onstop = async () => {
         setListening(false)
+        if (mediaStreamRef.current) {
+          try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
+          mediaStreamRef.current = null
+        }
         if (chunks.length === 0) return
         setTranscribing(true)
         const blob = new Blob(chunks, { type: mimeType || 'audio/webm' })
         const formData = new FormData()
-        formData.append('file', blob, 'audio.webm')
+        formData.append('file', blob, 'recording.webm')
 
         try {
           const resp = await fetch(`${API_URL}/api/transcribe`, {
@@ -925,7 +977,7 @@ export default function App() {
           })
           const res = await resp.json()
           if (res.ok && res.text) {
-            setInput(prev => prev ? (prev + ' ' + res.text) : res.text)
+            setInput(prev => prev ? (prev.trim() + ' ' + res.text.trim()) : res.text.trim())
           } else if (res.error) {
             console.warn("Transkripsiyon hatası:", res.error)
           }
@@ -936,37 +988,43 @@ export default function App() {
         }
       }
 
-      recorder.start()
+      recorder.start(250)
       setListening(true)
     } catch (err) {
       console.warn("Mikrofon hatası:", err)
       setListening(false)
-      alert("Mikrofon erişimi reddedildi veya bulunamadı.")
+      alert("Mikrofon erişimi reddedildi veya bulunamadı. Lütfen mikrofon izinlerini kontrol edin.")
     }
   }
 
   const startListening = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) {
-      // Web Speech API olmayan ortamlarda (Electron / Mobil) doğrudan MediaRecorder + Groq Whisper
+    unlockAudio()
+    // Electron ortamında Chromium Google Speech API desteği olmadığı için doğrudan MediaRecorder + Whisper kullanılır
+    if (isElectron) {
       startMediaRecorderFallback()
       return
     }
+
     try {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SR) {
+        startMediaRecorderFallback()
+        return
+      }
       const rec = new SR()
       rec.lang = 'tr-TR'
-      rec.continuous = true
+      rec.continuous = false
       rec.interimResults = true
       rec.onresult = e => {
         let transcript = ''
         for (let i = 0; i < e.results.length; i++) {
           transcript += e.results[i][0].transcript
         }
-        setInput(transcript)
+        if (transcript) setInput(transcript)
       }
       rec.onerror = (err) => {
         console.warn("Web Speech API hatası, MediaRecorder yedeğine geçiliyor:", err)
-        try { rec.stop() } catch {}
+        try { rec.abort() } catch {}
         recRef.current = null
         startMediaRecorderFallback()
       }
@@ -1108,6 +1166,7 @@ export default function App() {
         setStreamPreview('')
         setMessages(p=>[...p,{role:'ales',content:d.content,id:Date.now()}])
         loadConversations()
+        lastAssistantMsgRef.current = d.content || ''
         if (autoSpeakRef.current && d.content) {
           playTTS(d.content)
         }
@@ -1430,6 +1489,7 @@ export default function App() {
   }
 
   const send = () => {
+    unlockAudio()
     const text = input.trim()
     if (!text || !connected || thinking || showOnboarding) return
     setInput('')
@@ -1585,12 +1645,21 @@ export default function App() {
               </div>
               {m.role!=='user' && (
                 <button
-                  onClick={()=>playTTS(m.content)}
-                  title="Sesli Oku"
+                  onClick={()=>{
+                    unlockAudio()
+                    setAudioBlocked(false)
+                    if (speaking) {
+                      stopAudio()
+                      setSpeaking(false)
+                    } else {
+                      playTTS(m.content)
+                    }
+                  }}
+                  title={speaking ? "Sesi Durdur" : "Sesli Oku"}
                   style={{
                     background:'rgba(255,255,255,0.08)',
                     border:'1px solid rgba(255,255,255,0.15)',
-                    color:'#E4E4E7',
+                    color: speaking ? '#4ade80' : '#E4E4E7',
                     cursor:'pointer',
                     fontSize:13,
                     padding:'5px 8px',
@@ -1600,9 +1669,9 @@ export default function App() {
                     transition:'all .15s'
                   }}
                   onMouseEnter={e=>e.currentTarget.style.color='#fff'}
-                  onMouseLeave={e=>e.currentTarget.style.color='#E4E4E7'}
+                  onMouseLeave={e=>e.currentTarget.style.color=speaking?'#4ade80':'#E4E4E7'}
                 >
-                  🔊
+                  {speaking ? '⏹️' : '🔊'}
                 </button>
               )}
               {m.role==='user' && <div style={{width:28,height:28,borderRadius:'50%',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:'#E4E4E7',fontWeight:600,flexShrink:0,fontFamily:'monospace'}}>SEN</div>}
@@ -2250,6 +2319,105 @@ export default function App() {
 
       {/* INPUT */}
       <footer className="chat-footer" style={{padding:'10px 14px 12px',borderTop:'1px solid rgba(255,255,255,0.12)',background:'#121212',flexShrink:0}}>
+        {/* SES VE KAYIT BİLGİLENDİRME BANTLARI */}
+        {listening && (
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'space-between',
+            gap:8,
+            padding:'8px 12px',
+            background:'rgba(239, 68, 68, 0.16)',
+            border:'1px solid rgba(239, 68, 68, 0.45)',
+            borderRadius:7,
+            marginBottom:8,
+            color:'#f87171',
+            fontSize:12,
+            fontFamily:'monospace'
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{width:9,height:9,borderRadius:'50%',background:'#ef4444',boxShadow:'0 0 10px #ef4444',display:'inline-block',animation:'pulse 1s infinite'}}></span>
+              <span style={{fontWeight:700}}>🔴 Kaydediliyor... Mikrofon dinliyor (Konuşun)</span>
+            </div>
+            <button
+              onClick={stopListening}
+              style={{
+                background:'#ef4444',
+                color:'#ffffff',
+                border:'none',
+                borderRadius:5,
+                padding:'4px 10px',
+                fontSize:11,
+                fontWeight:700,
+                cursor:'pointer',
+                fontFamily:'monospace'
+              }}
+            >
+              BİTİR & GÖNDER
+            </button>
+          </div>
+        )}
+
+        {transcribing && (
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            gap:8,
+            padding:'8px 12px',
+            background:'rgba(59, 130, 246, 0.16)',
+            border:'1px solid rgba(59, 130, 246, 0.45)',
+            borderRadius:7,
+            marginBottom:8,
+            color:'#60a5fa',
+            fontSize:12,
+            fontFamily:'monospace'
+          }}>
+            <span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>◌</span>
+            <span>⏳ Ses yazıya çevriliyor (Whisper API)...</span>
+          </div>
+        )}
+
+        {audioBlocked && autoSpeak && (
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'space-between',
+            gap:8,
+            padding:'8px 12px',
+            background:'rgba(234, 179, 8, 0.16)',
+            border:'1px solid rgba(234, 179, 8, 0.45)',
+            borderRadius:7,
+            marginBottom:8,
+            color:'#facc15',
+            fontSize:12,
+            fontFamily:'monospace'
+          }}>
+            <span>🔇 Tarayıcı otomatik ses çalmayı duraklattı</span>
+            <button
+              onClick={()=>{
+                unlockAudio();
+                setAudioBlocked(false);
+                if (lastAssistantMsgRef.current) {
+                  playTTS(lastAssistantMsgRef.current);
+                }
+              }}
+              style={{
+                background:'#facc15',
+                color:'#000000',
+                border:'none',
+                borderRadius:5,
+                padding:'4px 10px',
+                fontSize:11,
+                fontWeight:700,
+                cursor:'pointer',
+                fontFamily:'monospace'
+              }}
+            >
+              🔊 Sesi Başlat
+            </button>
+          </div>
+        )}
+
         <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
           <button
             style={{
@@ -2867,6 +3035,7 @@ function MetricsPanel() {
 }
 
 function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, onAutoSpeakChange, isTab = false }) {
+  const [subTab, setSubTab] = useState('basic') // 'basic' | 'advanced'
   const [keys, setKeys] = useState(() => {
     const base = { groq:'', cerebras:'', elevenlabs:'', elevenlabs_voice: VOICE_OPTIONS[0].id, edge_voice: 'tr-TR-AhmetNeural', gemini:'', sambanova:'', openrouter:'', nvidia:'' }
     try {
@@ -3019,7 +3188,7 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
           </div>
           <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',gap:8}}>
             {[
-              {k:'has_groq',n:'Groq'},{k:'has_cerebras',n:'Cerebras'},{k:'has_gemini',n:'Gemini'},
+              {k:'has_groq',n:'Groq'},{k:'has_gemini',n:'Gemini'},{k:'has_cerebras',n:'Cerebras'},
               {k:'has_sambanova',n:'SambaNova'},{k:'has_openrouter',n:'OpenRouter'},{k:'has_nvidia',n:'NVIDIA'},
             ].map(p=>(
               <div key={p.k} style={{background:'#121212',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,padding:'6px 10px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#ffffff',fontFamily:'monospace'}}>
@@ -3030,142 +3199,273 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
           </div>
         </div>
       )}
-      <ModeSelector />
-      <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:2,marginBottom:10}}>API AYARLARI</div>
-      <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10,marginBottom:14}}>
-        {[
-          {k:'groq',h:'has_groq',p:'Groq Key (gsk_...)'},
-          {k:'cerebras',h:'has_cerebras',p:'Cerebras Key (csk_...)'},
-          {k:'elevenlabs',h:'has_elevenlabs',p:'ElevenLabs Key (sk_...)'},
-          {k:'gemini',h:'has_gemini',p:'Gemini Key (AIza... / AQ....)'},
-          {k:'sambanova',h:'has_sambanova',p:'SambaNova Key (sk_-)'},
-          {k:'openrouter',h:'has_openrouter',p:'OpenRouter Key (sk-or-...)'},
-          {k:'nvidia',h:'has_nvidia',p:'NVIDIA NIM Key (nvapi-...)'}
-        ].map(f=>(
-          <div key={f.k} style={{position:'relative',display:'flex',flexDirection:'column'}}>
-            <input
-              style={iStyle}
-              type="password"
-              placeholder={serverCfg?.[f.h] ? `${f.p} (Mevcut: Ayarlandı)` : f.p}
-              value={keys[f.k]}
-              onChange={e=>setKeys(p=>({...p,[f.k]:e.target.value}))}
-            />
-            {serverCfg?.[f.h] && (
-              <span style={{fontSize:11,color:'#4ade80',marginTop:3,fontFamily:'monospace'}}>✓ Sunucuda tanımlı</span>
+
+      {/* APPLE / CLAUDE STİLİ SEKMELER: TEMEL & GELİŞMİŞ */}
+      <div style={{
+        display:'flex',
+        background:'#1E1E24',
+        borderRadius:10,
+        padding:4,
+        marginBottom:18,
+        border:'1px solid rgba(255,255,255,0.14)'
+      }}>
+        <button
+          onClick={()=>setSubTab('basic')}
+          style={{
+            flex:1,
+            padding:'10px 14px',
+            borderRadius:8,
+            border:'none',
+            background:subTab==='basic'?'#ffffff':'transparent',
+            color:subTab==='basic'?'#000000':'#A1A1AA',
+            fontWeight:700,
+            fontSize:13,
+            fontFamily:'monospace',
+            cursor:'pointer',
+            transition:'all .15s'
+          }}
+        >
+          ✨ TEMEL (Sohbet & Model)
+        </button>
+        <button
+          onClick={()=>setSubTab('advanced')}
+          style={{
+            flex:1,
+            padding:'10px 14px',
+            borderRadius:8,
+            border:'none',
+            background:subTab==='advanced'?'#ffffff':'transparent',
+            color:subTab==='advanced'?'#000000':'#A1A1AA',
+            fontWeight:700,
+            fontSize:13,
+            fontFamily:'monospace',
+            cursor:'pointer',
+            transition:'all .15s'
+          }}
+        >
+          ⚙️ GELİŞMİŞ (Tüm Ayarlar)
+        </button>
+      </div>
+
+      {/* ─── TEMEL AYARLAR (BASIC) ─── */}
+      {subTab === 'basic' && (
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {/* Model / Mod Seçimi */}
+          <ModeSelector />
+
+          {/* Temel API Anahtarları: Sadece Groq ve Gemini */}
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:10}}>
+              TEMEL API ANAHTARLARI
+            </div>
+            <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:12}}>
+              {[
+                {k:'groq',h:'has_groq',label:'Groq API Key (Hızlı Sohbet & Whisper Ses)',p:'gsk_...'},
+                {k:'gemini',h:'has_gemini',label:'Gemini API Key (Google AI Görsel/Zeka)',p:'AIza... / AQ...'}
+              ].map(f=>(
+                <div key={f.k} style={{display:'flex',flexDirection:'column',gap:4}}>
+                  <label style={{fontSize:12,color:'#E4E4E7',fontFamily:'monospace',fontWeight:600}}>{f.label}</label>
+                  <input
+                    style={iStyle}
+                    type="password"
+                    placeholder={serverCfg?.[f.h] ? `${f.p} (Mevcut: Ayarlandı)` : f.p}
+                    value={keys[f.k]}
+                    onChange={e=>setKeys(p=>({...p,[f.k]:e.target.value}))}
+                  />
+                  {serverCfg?.[f.h] && (
+                    <span style={{fontSize:11,color:'#4ade80',fontFamily:'monospace'}}>✓ Aktif ve Tanımlı</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginTop:8}}>
+              💡 ALES'in yanıt verebilmesi ve konuşabilmesi için Groq veya Gemini anahtarından en az biri yeterlidir.
+            </div>
+          </div>
+
+          {/* Otomatik Seslendirme Toggle */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8}}>
+            <div style={{display:'flex',flexDirection:'column'}}>
+              <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>OTOMATİK SESLENDİRME (AUTO-SPEAK)</span>
+              <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>Yanıtlar tamamlandığında sesli olarak okunur</span>
+            </div>
+            <button
+              onClick={() => {
+                const next = !autoSpeak;
+                onAutoSpeakChange && onAutoSpeakChange(next);
+                try { localStorage.setItem('ales_autospeak', String(next)); } catch {}
+              }}
+              style={{
+                padding:'8px 16px',
+                borderRadius:6,
+                border:`1px solid ${autoSpeak ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
+                background:autoSpeak ? '#ffffff' : '#222222',
+                color:autoSpeak ? '#000000' : '#ffffff',
+                fontWeight:700,
+                fontSize:13,
+                fontFamily:'monospace',
+                cursor:'pointer'
+              }}
+            >
+              {autoSpeak ? 'AÇIK' : 'KAPALI'}
+            </button>
+          </div>
+
+          {/* Kaydet Butonu */}
+          <div style={{display:'flex',gap:8,marginTop:6}}>
+            <button style={{flex:1,padding:'12px',background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontWeight:'bold',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={save}>
+              {saved?'✓ KAYDEDİLDİ':'KAYDET'}
+            </button>
+            {onClose && (
+              <button style={{flex:1,padding:'12px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontWeight:'600',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={onClose}>
+                {isTab ? 'SOHBETE DÖN' : 'İPTAL'}
+              </button>
             )}
           </div>
-        ))}
-      </div>
-      <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
-        <select style={{...iStyle,flex:'1 1 200px'}} value={keys.elevenlabs_voice} onChange={e=>setKeys(p=>({...p,elevenlabs_voice:e.target.value}))}>
-          {VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
-        </select>
-        <button style={{padding:'11px 18px',background:'#2a2a2a',border:'1px solid rgba(255,255,255,0.35)',borderRadius:8,color:'#ffffff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',whiteSpace:'nowrap',flexShrink:0}} onClick={testVoice} disabled={testing}>
-          {testing ? 'ÇALINIYOR...' : '▶ SESİ TEST ET'}
-        </button>
-      </div>
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ÜCRETSİZ SES (ElevenLabs key yoksa/başarısızsa bu kullanılır)</div>
-        <select style={iStyle} value={keys.edge_voice} onChange={e=>setKeys(p=>({...p,edge_voice:e.target.value}))}>
-          {EDGE_VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
-        </select>
-      </div>
-      {/* OTOMATİK SESLİ OKU */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14,flexWrap:'wrap',gap:10}}>
-        <div style={{display:'flex',flexDirection:'column'}}>
-          <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>OTOMATİK SESLİ OKU (AUTO-SPEAK)</span>
-          <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>Her ALES yanıtı tamamlandığında otomatik olarak seslendirilir</span>
         </div>
-        <button
-          onClick={() => {
-            const next = !autoSpeak;
-            onAutoSpeakChange && onAutoSpeakChange(next);
-            try { localStorage.setItem('ales_autospeak', String(next)); } catch {}
-          }}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 6,
-            border: `1px solid ${autoSpeak ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
-            background: autoSpeak ? '#ffffff' : '#222222',
-            color: autoSpeak ? '#000000' : '#ffffff',
-            fontWeight: 700,
-            fontSize: 13,
-            fontFamily:'monospace',
-            cursor: 'pointer'
-          }}
-        >
-          {autoSpeak ? 'AÇIK' : 'KAPALI'}
-        </button>
-      </div>
+      )}
 
-      {/* MODEL KEŞFİ & OTO-ONARIM */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14,flexWrap:'wrap',gap:10}}>
-        <div style={{display:'flex',flexDirection:'column'}}>
-          <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>MODEL KEŞFİ & KENDİNİ ONARMA</span>
-          <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>Canlı API'leri (Groq, Gemini, Cerebras) tara, ölü modelleri otomatik onar</span>
-          {refreshMsg && (
-            <span style={{fontSize:12,color:refreshMsg.startsWith('✓') ? '#4ade80' : '#f87171',marginTop:4,fontFamily:'monospace',fontWeight:600}}>{refreshMsg}</span>
-          )}
+      {/* ─── GELİŞMİŞ AYARLAR (ADVANCED) ─── */}
+      {subTab === 'advanced' && (
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {/* Uyarı Bandı */}
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            gap:10,
+            padding:'12px 16px',
+            background:'rgba(234, 179, 8, 0.12)',
+            border:'1px solid rgba(234, 179, 8, 0.35)',
+            borderRadius:8,
+            color:'#facc15',
+            fontSize:13,
+            fontFamily:'monospace',
+            fontWeight:600
+          }}>
+            <span>⚠️ Gelişmiş ayarlar. Emin değilseniz dokunmayın.</span>
+          </div>
+
+          {/* Diğer Sağlayıcı Anahtarları */}
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:'#ffffff',fontFamily:'monospace',letterSpacing:1,marginBottom:10}}>
+              DİĞER MODEL SAĞLAYICI ANAHTARLARI
+            </div>
+            <div className="responsive-grid-2" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10}}>
+              {[
+                {k:'cerebras',h:'has_cerebras',p:'Cerebras Key (csk_...)'},
+                {k:'nvidia',h:'has_nvidia',p:'NVIDIA NIM Key (nvapi-...)'},
+                {k:'sambanova',h:'has_sambanova',p:'SambaNova Key (sk_-)'},
+                {k:'openrouter',h:'has_openrouter',p:'OpenRouter Key (sk-or-...)'},
+                {k:'elevenlabs',h:'has_elevenlabs',p:'ElevenLabs Key (sk_...)'},
+              ].map(f=>(
+                <div key={f.k} style={{position:'relative',display:'flex',flexDirection:'column'}}>
+                  <input
+                    style={iStyle}
+                    type="password"
+                    placeholder={serverCfg?.[f.h] ? `${f.p} (Mevcut: Ayarlandı)` : f.p}
+                    value={keys[f.k]}
+                    onChange={e=>setKeys(p=>({...p,[f.k]:e.target.value}))}
+                  />
+                  {serverCfg?.[f.h] && (
+                    <span style={{fontSize:11,color:'#4ade80',marginTop:3,fontFamily:'monospace'}}>✓ Sunucuda tanımlı</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Ses Motoru Seçimi */}
+          <div>
+            <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ELEVENLABS SESİ & TEST</div>
+            <div style={{display:'flex',gap:10,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
+              <select style={{...iStyle,flex:'1 1 200px'}} value={keys.elevenlabs_voice} onChange={e=>setKeys(p=>({...p,elevenlabs_voice:e.target.value}))}>
+                {VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
+              </select>
+              <button style={{padding:'11px 18px',background:'#2a2a2a',border:'1px solid rgba(255,255,255,0.35)',borderRadius:8,color:'#ffffff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'monospace',whiteSpace:'nowrap',flexShrink:0}} onClick={testVoice} disabled={testing}>
+                {testing ? 'ÇALINIYOR...' : '▶ SESİ TEST ET'}
+              </button>
+            </div>
+            <div style={{fontSize:13,color:'#E4E4E7',fontFamily:'monospace',marginBottom:6,fontWeight:600}}>ÜCRETSİZ SES (Edge-TTS - ElevenLabs yoksa kullanılır)</div>
+            <select style={iStyle} value={keys.edge_voice} onChange={e=>setKeys(p=>({...p,edge_voice:e.target.value}))}>
+              {EDGE_VOICE_OPTIONS.map(v=><option key={v.id} value={v.id} style={{background:'#1a1a1a',color:'#ffffff'}}>{v.name}</option>)}
+            </select>
+          </div>
+
+          {/* Model Keşfi & Kendini Onarma */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,flexWrap:'wrap',gap:10}}>
+            <div style={{display:'flex',flexDirection:'column'}}>
+              <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>MODEL KEŞFİ & KENDİNİ ONARMA</span>
+              <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>Canlı API'leri (Groq, Gemini, Cerebras) tara, ölü modelleri otomatik onar</span>
+              {refreshMsg && (
+                <span style={{fontSize:12,color:refreshMsg.startsWith('✓') ? '#4ade80' : '#f87171',marginTop:4,fontFamily:'monospace',fontWeight:600}}>{refreshMsg}</span>
+              )}
+            </div>
+            <button
+              onClick={refreshModels}
+              disabled={refreshingModels}
+              style={{
+                padding:'8px 16px',
+                borderRadius:6,
+                border:'1px solid rgba(255,255,255,0.3)',
+                background:refreshingModels ? '#333333' : '#222222',
+                color:'#ffffff',
+                fontWeight:700,
+                fontSize:13,
+                fontFamily:'monospace',
+                cursor:refreshingModels ? 'wait' : 'pointer'
+              }}
+            >
+              {refreshingModels ? '🔄 TARANIYOR...' : '🔄 MODELLERİ TARA'}
+            </button>
+          </div>
+
+          {/* Bu Cihaza Kaydet (Beni Hatırla) */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,flexWrap:'wrap',gap:10}}>
+            <div style={{display:'flex',flexDirection:'column'}}>
+              <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>BU CİHAZA KAYDET (BENİ HATIRLA)</span>
+              <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>API anahtarlarını tarayıcıda saklar; yenilemede otomatik yükler.</span>
+            </div>
+            <button
+              onClick={() => {
+                const next = !rememberKeys;
+                setRememberKeys(next);
+                try { localStorage.setItem('ales_remember_keys', String(next)); } catch {}
+              }}
+              style={{
+                padding:'8px 16px',
+                borderRadius:6,
+                border:`1px solid ${rememberKeys ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
+                background:rememberKeys ? '#ffffff' : '#222222',
+                color:rememberKeys ? '#000000' : '#ffffff',
+                fontWeight:700,
+                fontSize:13,
+                fontFamily:'monospace',
+                cursor:'pointer'
+              }}
+            >
+              {rememberKeys ? 'AÇIK (SAKLANIYOR)' : 'KAPALI'}
+            </button>
+          </div>
+
+          {/* Kaydet Butonu */}
+          <div style={{display:'flex',gap:8,marginTop:6}}>
+            <button style={{flex:1,padding:'12px',background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontWeight:'bold',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={save}>
+              {saved?'✓ KAYDEDİLDİ':'KAYDET'}
+            </button>
+            {onClose && (
+              <button style={{flex:1,padding:'12px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontWeight:'600',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={onClose}>
+                {isTab ? 'SOHBETE DÖN' : 'İPTAL'}
+              </button>
+            )}
+          </div>
+
+          {/* Ek Gelişmiş Paneller */}
+          <SystemPromptPanel />
+          <VaultPanel />
+          <SkillsConnectorsPanel />
+          <AdvancedPanel pendingSkills={pendingSkills} onSkillsChange={onSkillsChange} />
         </div>
-        <button
-          onClick={refreshModels}
-          disabled={refreshingModels}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 6,
-            border: '1px solid rgba(255,255,255,0.3)',
-            background: refreshingModels ? '#333333' : '#222222',
-            color: '#ffffff',
-            fontWeight: 700,
-            fontSize: 13,
-            fontFamily:'monospace',
-            cursor: refreshingModels ? 'wait' : 'pointer'
-          }}
-        >
-          {refreshingModels ? '🔄 TARANIYOR...' : '🔄 MODELLERİ TARA'}
-        </button>
-      </div>
-
-      {/* BU CİHAZA KAYDET (BENİ HATIRLA) */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14,flexWrap:'wrap',gap:10}}>
-        <div style={{display:'flex',flexDirection:'column'}}>
-          <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>BU CİHAZA KAYDET (BENİ HATIRLA)</span>
-          <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>API anahtarlarını tarayıcıda saklar; sayfa yenilendiğinde veya sunucu yeniden başladığında otomatik yükler.</span>
-        </div>
-        <button
-          onClick={() => {
-            const next = !rememberKeys;
-            setRememberKeys(next);
-            try { localStorage.setItem('ales_remember_keys', String(next)); } catch {}
-          }}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 6,
-            border: `1px solid ${rememberKeys ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
-            background: rememberKeys ? '#ffffff' : '#222222',
-            color: rememberKeys ? '#000000' : '#ffffff',
-            fontWeight: 700,
-            fontSize: 13,
-            fontFamily:'monospace',
-            cursor: 'pointer'
-          }}
-        >
-          {rememberKeys ? 'AÇIK (CİHAZDA SAKLANIYOR)' : 'KAPALI'}
-        </button>
-      </div>
-
-      <div style={{display:'flex',gap:8}}>
-        <button style={{flex:1,padding:'11px',background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontWeight:'bold',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={save}>{saved?'✓ KAYDEDİLDİ':'KAYDET'}</button>
-        {onClose && (
-          <button style={{flex:1,padding:'11px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontWeight:'600',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={onClose}>
-            {isTab ? 'SOHBETE DÖN' : 'İPTAL'}
-          </button>
-        )}
-      </div>
-      <SystemPromptPanel />
-      <VaultPanel />
-      <SkillsConnectorsPanel />
-      <AdvancedPanel pendingSkills={pendingSkills} onSkillsChange={onSkillsChange} />
+      )}
     </div>
   )
 }

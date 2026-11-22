@@ -613,15 +613,40 @@ async def rename_conversation(conv_id: str, data: dict, x_ales_key: str = Header
         raise HTTPException(status_code=401)
     return {"success": conv_store.rename_conversation(conv_id, data.get("title", ""))}
 
-# ─── HTTP: ONAYLAR / SES (cloud'da devre disi - frontend'in polling'i
-# hata almasin diye no-op donuyor) ─────────────────────────────────
+# ─── HTTP: ONAYLAR / SES ──────────────────────────────────────────
 @app.get("/approvals")
 async def approvals_stub():
     return {"approvals": []}
 
 @app.get("/voices")
 async def voices_stub():
-    return {"voices": [], "current": None, "note": "TTS cloud modunda henuz desteklenmiyor."}
+    return {"voices": [], "current": None, "note": "Edge-TTS ve ElevenLabs bulutta devrede."}
+
+@app.post("/speak")
+@app.post("/speak_test")
+async def cloud_speak_api(payload: dict):
+    """Bulut ve web kullanıcıları için metni sese çevirir (Edge-TTS / ElevenLabs)."""
+    text = (payload.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "error": "Metin boş"}
+    try:
+        import voice
+        import config_manager as cm
+        cfg = cm.load_config()
+        key = payload.get("elevenlabs_key") or _SESSION_KEYS.get("elevenlabs_key") or cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY", "")
+        voice_id = payload.get("voice_id") or cfg.get("elevenlabs_voice") or voice.DEFAULT_ELEVENLABS_VOICE
+        edge_voice = payload.get("edge_voice") or cfg.get("edge_voice") or "tr-TR-AhmetNeural"
+
+        loop = asyncio.get_event_loop()
+        clean = voice._clean_for_speech(text) if hasattr(voice, "_clean_for_speech") else text
+        audio_bytes = await loop.run_in_executor(None, voice.synthesize, clean, key, voice_id, edge_voice)
+        if audio_bytes:
+            mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
+            b64 = base64.b64encode(audio_bytes).decode("ascii")
+            return {"ok": True, "audio": b64, "mime": mime}
+        return {"ok": False, "error": "Ses üretilemedi"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.get("/api/download/pdf/{filename}")
 async def download_pdf_endpoint(filename: str):
