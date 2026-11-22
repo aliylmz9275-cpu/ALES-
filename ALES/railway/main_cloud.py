@@ -42,12 +42,16 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPExcepti
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 
-# ─── backend/ MODULLERINI REUSE ET ────────────────────────────────
-# multi_agent.py ve conversations.py masaustu backend'i icin yazildi ama
-# ikisi de zaten env-degiskeni fallback'i ile calisiyor (bkz. multi_agent.py
-# _call_nvidia vb: config_manager.load_config().get(...) or os.environ.get(...)).
-# Kod tekrari yerine dogrudan reuse ediyoruz.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+# ─── DIZINLERI BELIRLE VE BACKEND'I sys.path'e EKLE ───────────────
+BASE_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = BASE_DIR / "backend"
+if not BACKEND_DIR.exists():
+    for _b in [Path("/app/backend"), Path("backend"), Path("ALES/backend")]:
+        if _b.exists():
+            BACKEND_DIR = _b
+            break
+
+sys.path.insert(0, str(BACKEND_DIR))
 import multi_agent  # noqa: E402
 import conversations as conv_store  # noqa: E402
 
@@ -85,7 +89,11 @@ def has_any_api_key() -> bool:
         ("nvidia_key", "NVIDIA_API_KEY"),
     ))
 
-DIST_DIR = Path(__file__).resolve().parent.parent / "dist"  # multi-stage Dockerfile burayi doldurur
+DIST_DIR = BASE_DIR / "dist"
+for _d in [BASE_DIR / "dist", Path("/app/dist"), Path("dist"), Path("ALES/dist"), BASE_DIR / "frontend" / "dist"]:
+    if _d.exists() and (_d / "index.html").exists():
+        DIST_DIR = _d
+        break
 
 app = FastAPI()
 
@@ -678,9 +686,9 @@ async def reset_telemetry_endpoint():
     return {"ok": True, "message": "Metrikler sıfırlandı"}
 
 # ─── STATİK DOSYA VE PDF ERİŞİMİ ──────────────────────────────────────
-STATIC_PDFS_DIR = BASE_DIR / "static" / "pdfs"
+STATIC_PDFS_DIR = BACKEND_DIR / "static" / "pdfs"
 STATIC_PDFS_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="ales-static")
+app.mount("/static", StaticFiles(directory=str(BACKEND_DIR / "static")), name="ales-static")
 
 # ─── FRONTEND'I STATIK DOSYA OLARAK SUN (ayni deployment'tan tek URL) ──
 if DIST_DIR.exists():
