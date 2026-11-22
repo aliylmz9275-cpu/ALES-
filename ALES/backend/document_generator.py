@@ -25,7 +25,10 @@ try:
 except Exception:
     DOCS_DIR = Path("generated_docs")
 
+STATIC_PDFS_DIR = Path(__file__).resolve().parent / "static" / "pdfs"
+
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
+STATIC_PDFS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _clean_text_for_pdf(text: str) -> str:
@@ -59,7 +62,7 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
     safe_title = re.sub(r"[^\w\-_]", "_", title.strip()) or "Belge"
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_title}_{timestamp_str}.pdf"
-    pdf_path = DOCS_DIR / filename
+    pdf_path = STATIC_PDFS_DIR / filename
 
     try:
         # Sayfa numaralandırma için özel Canvas
@@ -255,8 +258,16 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
 
         doc.build(story, canvasmaker=NumberedCanvas)
 
+        # AppData yedek kopyası
+        try:
+            import shutil
+            shutil.copy2(str(pdf_path), str(DOCS_DIR / filename))
+        except Exception:
+            pass
+
         size_bytes = pdf_path.stat().st_size
-        download_url = f"/api/download/pdf/{filename}"
+        port = os.environ.get("PORT", "8000")
+        download_url = f"http://localhost:{port}/static/pdfs/{filename}"
 
         return {
             "ok": True,
@@ -278,7 +289,10 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
 def get_pdf_path(filename: str) -> Optional[Path]:
     """Güvenli şekilde oluşturulan PDF dosya yolunu döner (Path traversal korumalı)."""
     clean_name = os.path.basename(filename)
-    target = DOCS_DIR / clean_name
+    target = STATIC_PDFS_DIR / clean_name
     if target.exists() and target.is_file():
         return target
+    target2 = DOCS_DIR / clean_name
+    if target2.exists() and target2.is_file():
+        return target2
     return None

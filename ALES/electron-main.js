@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, dialog } = require('electron')
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, dialog, session } = require('electron')
 const path = require('path')
 const { spawn, execSync } = require('child_process')
 const fs = require('fs')
@@ -183,6 +183,14 @@ function createMainWindow() {
     },
     show: false,
     icon: path.join(__dirname, 'assets', 'icon.png'),
+  })
+
+  // Mikrofon ve Medya İzinleri (STT / MediaRecorder için kesin izin)
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(true)
+  })
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    return true
   })
 
   // devTools:false tek basina YETMEZ: Ctrl+Shift+I / F12 kisayollari

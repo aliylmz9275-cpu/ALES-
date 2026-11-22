@@ -346,7 +346,7 @@ async def synth_sentence(text: str, voice: str = None,
     try:
         if eng == "edge_tts":
             try:
-                data = await asyncio.wait_for(_synth_edge(text, voice), timeout=2.5)
+                data = await asyncio.wait_for(_synth_edge(text, voice), timeout=10.0)
                 if data:
                     return data
             except Exception as ee:

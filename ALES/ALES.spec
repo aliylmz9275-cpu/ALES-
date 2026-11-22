@@ -127,6 +127,8 @@ hiddenimports += [
     "concurrent.futures", "groq", "edge_tts", "pyautogui", "psutil",
     "httpx", "PIL", "selenium", "playwright", "pyperclip", "pytesseract",
     "mss", "websockets", "dotenv", "sqlite3", "encodings.idna",
+    "pyscreeze", "pymsgbox", "pytweening", "comtypes", "uiautomation", "pywinauto",
+    "reportlab", "markdown",
 ]
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -166,7 +168,8 @@ for _p in OPTIONAL:
 # collect_all: yaninda veri dosyasi / DLL tasiyan paketler.
 # Yalnizca KURULU olanlar icin cagriliyor.
 for _p in ("edge_tts", "groq", "google.generativeai", "cerebras", "keyring",
-           "RealtimeTTS", "sqlite_vec"):
+           "RealtimeTTS", "sqlite_vec", "pyautogui", "pyscreeze", "pymsgbox",
+           "pytweening", "mss", "uiautomation", "comtypes", "pywinauto", "reportlab"):
     if not _have(_p.split(".")[0]):
         continue
     try:

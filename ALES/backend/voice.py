@@ -20,6 +20,8 @@ hangisinden bakiyorsa) ses cikiyor.
 import asyncio
 import os
 import re
+import time
+import concurrent.futures
 
 
 def _clean_for_speech(text: str) -> str:
@@ -105,7 +107,9 @@ def synthesize_edge_sync(text: str, voice: str = "tr-TR-AhmetNeural"):
     olursa ham mp3 bytes, olmazsa None doner. edge_tts kutuphanesi
     API'si geregi once gecici bir dosyaya yaziyor, biz onu okuyup
     bytes olarak dondurup HEMEN siliyoruz - kalici dosya birikmesin."""
-    path = _temp_path("ales_voice_tmp.mp3")
+    pid = os.getpid()
+    ts = int(time.time() * 1000)
+    path = _temp_path(f"ales_voice_{pid}_{ts}.mp3")
     try:
         import edge_tts
 
@@ -113,16 +117,29 @@ def synthesize_edge_sync(text: str, voice: str = "tr-TR-AhmetNeural"):
             comm = edge_tts.Communicate(text[:600], voice)
             await comm.save(path)
 
-        asyncio.run(_gen())
-        with open(path, "rb") as f:
-            data = f.read()
-        return data
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(lambda: asyncio.run(_gen())).result(timeout=15)
+        else:
+            asyncio.run(_gen())
+
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            with open(path, "rb") as f:
+                data = f.read()
+            return data
+        return None
     except Exception as e:
         print(f"[TTS] Edge-TTS hatasi: {e}")
         return None
     finally:
         try:
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
         except Exception:
             pass
 

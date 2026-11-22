@@ -38,7 +38,7 @@ function authFetch(url, opts = {}) {
 // Mesaj içeriğindeki PDF ve bağlantıları şık indirme kartlarına dönüştürür
 function renderMessageContent(text) {
   if (!text || typeof text !== 'string') return text
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s)]+|\/api\/download\/pdf\/[^\s)]+)/g
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s)"',`]+|\/api\/download\/pdf\/[^\s)"',`]+|\/static\/pdfs\/[^\s)"',`]+)/g
   if (!linkRegex.test(text)) return text
 
   const parts = []
@@ -50,10 +50,10 @@ function renderMessageContent(text) {
     if (match.index > lastIndex) {
       parts.push(text.substring(lastIndex, match.index))
     }
-    const label = match[1] || match[3]
-    let url = match[2] || match[3]
+    let url = (match[2] || match[3] || '').trim().replace(/[)"',`]+$/, '')
+    let label = (match[1] || url.split('/').pop() || 'Dosya').trim()
     const fullUrl = url.startsWith('/') && !url.startsWith('//') ? `${API_URL}${url}` : url
-    const isPdf = url.toLowerCase().includes('.pdf') || url.includes('/api/download/pdf/')
+    const isPdf = url.toLowerCase().includes('.pdf') || url.includes('/static/pdfs/') || url.includes('/api/download/pdf/')
 
     if (isPdf) {
       parts.push(
@@ -63,6 +63,11 @@ function renderMessageContent(text) {
           target="_blank"
           rel="noopener noreferrer"
           download
+          onClick={(e) => {
+            if (window.open) {
+              window.open(fullUrl, '_blank')
+            }
+          }}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -76,6 +81,7 @@ function renderMessageContent(text) {
             fontWeight: 600,
             fontSize: 13,
             margin: '4px 2px',
+            cursor: 'pointer',
             verticalAlign: 'middle',
             transition: 'all 0.15s'
           }}
@@ -89,7 +95,7 @@ function renderMessageContent(text) {
           }}
         >
           <span>📄</span>
-          <span>{label}</span>
+          <span>{label.endsWith('.pdf') ? label : `${label}.pdf`}</span>
           <span style={{ fontSize: 11, opacity: 0.8 }}>⬇ İndir</span>
         </a>
       )
@@ -931,9 +937,7 @@ export default function App() {
   const startMediaRecorderFallback = async () => {
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Mikrofon erişimi desteklenmiyor.")
-        setListening(false)
-        return
+        throw new Error("getUserMedia desteklenmiyor")
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaStreamRef.current = stream
@@ -970,7 +974,8 @@ export default function App() {
         formData.append('file', blob, 'recording.webm')
 
         try {
-          const resp = await fetch(`${API_URL}/api/transcribe`, {
+          const endpoint = API_URL ? `${API_URL}/api/transcribe` : '/api/transcribe'
+          const resp = await fetch(endpoint, {
             method: 'POST',
             headers: isCloud ? { 'X-ALES-Key': getCloudKey() } : {},
             body: formData
@@ -991,24 +996,18 @@ export default function App() {
       recorder.start(250)
       setListening(true)
     } catch (err) {
-      console.warn("Mikrofon hatası:", err)
-      setListening(false)
-      alert("Mikrofon erişimi reddedildi veya bulunamadı. Lütfen mikrofon izinlerini kontrol edin.")
+      console.warn("MediaRecorder / getUserMedia hatası:", err)
+      // Web Speech API yedek denemesi
+      tryWebSpeechFallback()
     }
   }
 
-  const startListening = () => {
-    unlockAudio()
-    // Electron ortamında Chromium Google Speech API desteği olmadığı için doğrudan MediaRecorder + Whisper kullanılır
-    if (isElectron) {
-      startMediaRecorderFallback()
-      return
-    }
-
+  const tryWebSpeechFallback = () => {
     try {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition
       if (!SR) {
-        startMediaRecorderFallback()
+        setListening(false)
+        alert("Mikrofon erişimi alınamadı veya ses kaydı bu ortamda desteklenmiyor.")
         return
       }
       const rec = new SR()
@@ -1023,10 +1022,9 @@ export default function App() {
         if (transcript) setInput(transcript)
       }
       rec.onerror = (err) => {
-        console.warn("Web Speech API hatası, MediaRecorder yedeğine geçiliyor:", err)
-        try { rec.abort() } catch {}
+        console.warn("Web Speech API hatası:", err)
+        setListening(false)
         recRef.current = null
-        startMediaRecorderFallback()
       }
       rec.onend = () => {
         setListening(false)
@@ -1036,9 +1034,15 @@ export default function App() {
       rec.start()
       setListening(true)
     } catch (err) {
-      console.warn("Web Speech API başlatılamadı, yedeğe geçiliyor:", err)
-      startMediaRecorderFallback()
+      console.warn("Web Speech API başlatılamadı:", err)
+      setListening(false)
+      alert("Mikrofon başlatılamadı. Lütfen mikrofon izinlerini kontrol edin.")
     }
+  }
+
+  const startListening = () => {
+    unlockAudio()
+    startMediaRecorderFallback()
   }
 
   // ─── AKAN SES KUYRUGU (audio_streamer.py karsiligi) ─────────────

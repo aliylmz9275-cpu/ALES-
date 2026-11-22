@@ -16,37 +16,36 @@ teknigi - kucuk/ucretsiz modellerle buyuk fark yaratir.
 # Her zaman gonderilen cekirdek araclar (en sik kullanilanlar)
 CORE_TOOLS = {
     "remember_fact", "search_memory", "get_user_profile",
-    "add_pending_approval", "get_system_info",
+    "add_pending_approval", "get_system_info", "generate_pdf",
 }
 
 # Bu kategoriler HER ZAMAN aktif - ALES'in "Claude gibi" temel
 # yetenekleri. Kisitlanirsa model elinde arac olmadigi icin
 # "yapamiyorum" der.
-ALWAYS_INCLUDE_CATEGORIES = ["pc_control", "filesystem", "web", "code", "worldview", "memory"]
+ALWAYS_INCLUDE_CATEGORIES = ["pc_control", "filesystem", "document", "web", "code", "worldview", "memory"]
 
 # Kategori -> anahtar kelimeler -> arac isimleri
 TOOL_CATEGORIES = {
+    "document": {
+        "keywords": ["pdf", "rapor", "belge", "dokuman", "doküman", "yazdır", "yazdir",
+                      "kitapçık", "kitapcik", "çıktı", "cikti", "generate_pdf"],
+        "tools": ["generate_pdf"]
+    },
     "pc_control": {
         "keywords": ["ekran", "tikla", "yaz", "tus", "ac aç", "uygulama", "screenshot",
                       "goruntu", "kapat", "minimize", "pencere", "fare", "klavye"],
         "tools": ["take_screenshot", "open_app", "type_text", "press_key", "click_at",
                   "analyze_screen", "find_on_screen",
-                  # cua_action: click_at'in yerine GECMEZ, ustune gelir. Iki
-                  # farki var ve ikisi de bu kategoride olmasini haklı kilar:
-                  # (1) 0-1000 normalize koordinat kabul eder — ekrana bakan
-                  # modeller koordinati boyle uretme egilimindedir;
-                  # (2) SIRALI eylem listesi alir, yani "hotkey ctrl+s ->
-                  # bekle -> ad yaz -> enter" TEK turda biter, dort tur LLM
-                  # gidis-donusu olmaz.
                   "cua_action"]
     },
     "filesystem": {
         "keywords": ["dosya", "klasor", "klasör", "oku", "yaz", "duzenle", "düzenle",
                       "sil", "olustur", "oluştur", "kaydet", "ara", "bul", "liste",
-                      "klasoru", "icerik", "içerik", "rapor", "belge", "txt", "csv", "json"],
+                      "klasoru", "icerik", "içerik", "rapor", "belge", "txt", "csv", "json",
+                      "pdf", "dokuman", "doküman"],
         "tools": ["read_file", "write_file", "edit_file", "list_directory",
                   "create_directory", "delete_path", "search_files", "get_file_info",
-                  "list_skills", "read_skill"]
+                  "list_skills", "read_skill", "generate_pdf"]
     },
     "web": {
         "keywords": ["ara", "arastir", "araştır", "internet", "site", "web", "google",

@@ -723,7 +723,7 @@ TOOLS = [
     {"type":"function","function":{"name":"openclaw_browser","description":"Tarayici eylemini OpenClaw daemon'una gonder (yoksa yerel Playwright yedegine duser). Eylemler: goto (url), search (query). NOT: browse_web/web_search_deep dogrudan ayni isi yapar; bunu sadece daemon'un oturumu/sekmeleri gerekiyorsa kullan.","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["goto","search"]},"url":{"type":"string"},"query":{"type":"string"}},"required":["action"]}}},
     {"type":"function","function":{"name":"openclaw_terminal","description":"Kabuk (shell) komutu calistir ve cikti/hata kodunu getir - orn 'git status', 'dir', 'npm run build'. OpenClaw daemon varsa orada, yoksa yerel subprocess'te calisir. Uzun surecek komutlar icin timeout_s ver.","parameters":{"type":"object","properties":{"command":{"type":"string"},"timeout_s":{"type":"number","description":"Varsayilan 15, en fazla 120"}},"required":["command"]}}},
     # ── Belge ve PDF Üretimi ──
-    {"type":"function","function":{"name":"generate_pdf","description":"Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'bunu pdf yap', 'belge oluştur', 'rapor hazırla ve pdf ver' dediğinde kullan.","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge başlığı"},"content":{"type":"string","description":"Markdown formatında belge içeriği"}},"required":["title","content"]}}},
+    {"type":"function","function":{"name":"generate_pdf","description":"Creates a PDF file from text or markdown. If the user asks for a PDF, document, or report, YOU MUST use this tool. (Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'pdf yap', 'pdf oluştur', 'rapor hazırla', 'belge ver' dediğinde MUTLAKA bu aracı çağır).","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge veya rapor başlığı"},"content":{"type":"string","description":"Markdown formatında belge veya rapor içeriği"}},"required":["title","content"]}}},
 ]
 
 # ─── ACIL DURUM ARAC SETI ────────────────────────────────────────
@@ -1698,6 +1698,10 @@ DOSYA VE SİSTEM İŞLEMLERİ:
 - Dosya oluşturma -> write_file
 - Dosya düzenleme -> edit_file
 - Kritik işlemler (silme, harici onay gerektirenler) -> add_pending_approval
+
+BELGE VE PDF ÜRETİMİ:
+- If the user asks for a PDF or report, YOU MUST use the `generate_pdf` tool.
+- Kullanıcı bir PDF, rapor, özet veya doküman dosyası oluşturulmasını istediğinde doğrudan metinle geçiştirmek YASAKTIR; MUTLAKA `generate_pdf` aracını çağır ve üretilen dosya indirme bağlantısını kullanıcıya sun.
 
 EKRAN GÖRME (HIZ):
 - analyze_screen / take_screenshot ekranı görmen gerektiğinde kullanılır.
@@ -3451,7 +3455,7 @@ async def transcribe_audio_api(request: Request):
     Web Speech API desteği olmayan ortamlarda (Electron / Mobil) MediaRecorder yedeği.
     """
     audio_bytes = None
-    filename = "audio.webm"
+    filename = "recording.webm"
     content_type = "audio/webm"
 
     content_type_header = request.headers.get("content-type", "")
@@ -3461,8 +3465,8 @@ async def transcribe_audio_api(request: Request):
             file = form.get("file")
             if file and hasattr(file, "read"):
                 audio_bytes = await file.read()
-                filename = getattr(file, "filename", "audio.webm")
-                content_type = getattr(file, "content_type", "audio/webm")
+                filename = getattr(file, "filename", "recording.webm") or "recording.webm"
+                content_type = getattr(file, "content_type", "audio/webm") or "audio/webm"
         except Exception as e:
             print(f"[TRANSCRIBE] Form okuma hatası: {e}")
 
@@ -3480,7 +3484,13 @@ async def transcribe_audio_api(request: Request):
     if not audio_bytes:
         return {"ok": False, "error": "Ses verisi alınamadı", "text": ""}
 
-    groq_key = get_key("groq_key")
+    # Content-type ve dosya uzantısını temizle
+    if content_type and ";" in content_type:
+        content_type = content_type.split(";")[0].strip()
+    if not any(filename.endswith(ext) for ext in [".webm", ".mp3", ".wav", ".m4a", ".ogg"]):
+        filename = f"{filename}.webm"
+
+    groq_key = get_key("groq_key") or os.environ.get("GROQ_API_KEY", "") or os.environ.get("GROQ_KEY", "")
     if not groq_key:
         return {"ok": False, "error": "GROQ_API_KEY yapılandırılmamış", "text": ""}
 
@@ -5060,23 +5070,24 @@ async def speak_api(payload: dict):
     cleaned = voice._clean_for_speech(text) if voice else text
     audio_bytes = None
     try:
-        if audio_streamer:
+        cfg = load_config()
+        if voice:
             try:
-                audio_bytes = await audio_streamer.synth_sentence(cleaned)
-            except Exception:
-                pass
-        if not audio_bytes and voice:
-            try:
-                cfg = load_config()
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 audio_bytes = await loop.run_in_executor(
                     _executor, voice.synthesize, cleaned,
                     cfg.get("elevenlabs_key", ""),
                     cfg.get("elevenlabs_voice") or voice.DEFAULT_ELEVENLABS_VOICE,
                     cfg.get("edge_voice") or "tr-TR-AhmetNeural",
                 )
-            except Exception:
-                pass
+            except Exception as ve:
+                print(f"[SPEAK] voice.synthesize hatasi: {ve}")
+
+        if not audio_bytes and audio_streamer:
+            try:
+                audio_bytes = await audio_streamer.synth_sentence(cleaned)
+            except Exception as se:
+                print(f"[SPEAK] audio_streamer hatasi: {se}")
         if audio_bytes:
             mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
             b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -6205,6 +6216,13 @@ if WEBUI_DIR is not None:
 else:
     print("[ALES] UYARI: derlenmis arayuz bulunamadi -> yalnizca API acik. "
           "Cozum: frontend/ icinde 'npm run build' (cikti: ALES/dist).")
+
+# ── Statik PDF ve Dosya İndirme Bağlantısı ───────────────────────
+_backend_static = Path(__file__).resolve().parent / "static"
+_backend_static.mkdir(parents=True, exist_ok=True)
+(_backend_static / "pdfs").mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_backend_static)), name="static")
+_API_SEGMENTS.add("static")
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

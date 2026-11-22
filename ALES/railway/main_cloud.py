@@ -677,6 +677,11 @@ async def reset_telemetry_endpoint():
     telemetry.reset_metrics()
     return {"ok": True, "message": "Metrikler sıfırlandı"}
 
+# ─── STATİK DOSYA VE PDF ERİŞİMİ ──────────────────────────────────────
+STATIC_PDFS_DIR = BASE_DIR / "static" / "pdfs"
+STATIC_PDFS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="ales-static")
+
 # ─── FRONTEND'I STATIK DOSYA OLARAK SUN (ayni deployment'tan tek URL) ──
 if DIST_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="static")
