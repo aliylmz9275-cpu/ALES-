@@ -70,19 +70,32 @@ def _temp_path(name: str) -> str:
 
 def synthesize_elevenlabs(text: str, api_key: str, voice_id: str = None):
     """ElevenLabs ile ses uretir. Basarili olursa ham mp3 bytes, olmazsa None doner."""
-    if not api_key:
+    if not api_key or not str(api_key).strip():
         return None
     try:
         import httpx
-        vid = voice_id or DEFAULT_ELEVENLABS_VOICE
+        key = str(api_key).strip()
+        vid = (voice_id or DEFAULT_ELEVENLABS_VOICE).strip()
+        # İsimle verilmişse (Adam / Rachel) ID eşleştirmesi yap
+        voice_map = {
+            "adam": "pNInz6obpgDQGcFmaJgB",
+            "rachel": "21m00Tcm4TlvDq8ikWAM",
+            "arnold": "VR6AewLTigWG4xSOukaG",
+            "antoni": "ErXwobaYiN019PkySvjV",
+            "josh": "TxGEqnHWrfWFTfGW9XjX",
+            "bella": "EXAVITQu4vr4xnSDxMaL",
+        }
+        if vid.lower() in voice_map:
+            vid = voice_map[vid.lower()]
+
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{vid}"
         headers = {
-            "xi-api-key": api_key,
+            "xi-api-key": key,
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         }
         payload = {
-            "text": text[:600],
+            "text": text[:1000],
             "model_id": "eleven_multilingual_v2",
             "voice_settings": {
                 "stability": 0.45,

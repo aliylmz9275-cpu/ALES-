@@ -76,6 +76,8 @@ if not os.path.exists(os.path.join(WEBUI_SRC, "index.html")):
         % os.path.join(WEBUI_SRC, "index.html"))
 
 datas = [(WEBUI_SRC, "webui")]
+if os.path.exists(os.path.join(BACKEND, "static")):
+    datas.append((os.path.join(BACKEND, "static"), "static"))
 binaries = []
 hiddenimports = []
 

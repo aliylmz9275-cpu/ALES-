@@ -1567,15 +1567,24 @@ async def send_tts_audio(text: str, websocket: WebSocket):
         try:
             cfg = load_config()
             loop = asyncio.get_event_loop()
+            key = (
+                cfg.get("elevenlabs_key", "")
+                or get_key("elevenlabs_key")
+                or os.environ.get("ELEVENLABS_API_KEY", "")
+                or os.environ.get("ELEVENLABS_KEY", "")
+            ).strip()
+            voice_id = cfg.get("elevenlabs_voice") or DEFAULT_ELEVENLABS_VOICE
+            edge_voice = cfg.get("edge_voice") or DEFAULT_EDGE_VOICE
             audio_bytes = await loop.run_in_executor(
                 _executor, synthesize, text,
-                cfg.get("elevenlabs_key", ""),
-                cfg.get("elevenlabs_voice") or DEFAULT_ELEVENLABS_VOICE,
-                cfg.get("edge_voice", ""),
+                key,
+                voice_id,
+                edge_voice,
             )
             if audio_bytes:
+                mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
                 b64 = base64.b64encode(audio_bytes).decode("ascii")
-                await websocket.send_json({"type": "audio", "data": b64, "mime": "audio/mpeg"})
+                await websocket.send_json({"type": "audio", "data": b64, "mime": mime})
         except Exception as e:
             print(f"[TTS] Ses gonderilemedi: {e}")
     finally:
@@ -1679,7 +1688,9 @@ GENEL ASİSTAN VE DÜŞÜNCE ORTAĞI (TEMEL İLKE):
 
 ÇEKİRDEK KURALLAR (PAZARLIK YOK):
 1. UYDURMA YOK: Emin olmadığın hiçbir şeyi kesin söyleme. Doğrulamadıysan açıkça belirt veya "VARSAYIM:" etiketi kullan.
-2. ARAÇ KULLANIMI: Yalnızca kullanıcının isteği gerçekten bir araç, sistem kontrolü, canlı arama veya dosya işlemi gerektirdiğinde araç çağır. Basit soru ve sohbetlerde gereksiz araç çağırma.
+2. AGGRESSIVE TOOL EXECUTION (CLAUDE CODE PROTOCOL - NO EXPLANATIONS):
+NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.
+Kullanıcının isteği bir araç, dosya oluşturma, kod çalıştırma, sistem kontrolü, canlı arama veya PDF üretimi gerektiriyorsa, ASLA nasıl yapılacağını anlatma; ARACI ÇAĞIRIP HEMEN YAP!
 3. İÇ DÜŞÜNCEYİ GÖSTERME: Kullanıcıya sadece doğrudan yanıtı, net gerekçeyi ve gerekliyse uygulanabilir adımları ver. Planını uzun uzun yazma.
 4. NETLİK VE DERİNLİK: "Direkt yap" dendiğinde soru sorma, en mantıklı adımla ilerle. Analiz veya bilgi istendiğinde doyurucu ve derinlikli açıkla.
 
@@ -1700,8 +1711,9 @@ DOSYA VE SİSTEM İŞLEMLERİ:
 - Kritik işlemler (silme, harici onay gerektirenler) -> add_pending_approval
 
 BELGE VE PDF ÜRETİMİ:
-- If the user asks for a PDF or report, YOU MUST use the `generate_pdf` tool.
-- Kullanıcı bir PDF, rapor, özet veya doküman dosyası oluşturulmasını istediğinde doğrudan metinle geçiştirmek YASAKTIR; MUTLAKA `generate_pdf` aracını çağır ve üretilen dosya indirme bağlantısını kullanıcıya sun.
+- NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or code tutorials.
+- If the user asks for a PDF, report, or document, YOU MUST use the `generate_pdf` tool.
+- Kullanıcı bir PDF, rapor, özet veya doküman dosyası oluşturulmasını istediğinde doğrudan metinle veya kod anlatımıyla geçiştirmek KESİNLİKLE YASAKTIR; MUTLAKA `generate_pdf` aracını çağır ve üretilen dosya indirme bağlantısını kullanıcıya sun.
 
 EKRAN GÖRME (HIZ):
 - analyze_screen / take_screenshot ekranı görmen gerektiğinde kullanılır.
@@ -2235,6 +2247,21 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
         except Exception as e:
             print(f"[DGM] iskele secilemedi: {e}")
 
+    # ── AGGRESSIVE TOOL EXECUTION DIRECTIVE (Claude Protocol) ────────
+    _msg_l = (user_message or "").lower()
+    _pdf_intent = any(k in _msg_l for k in ["pdf", "rapor", "belge", "doküman", "dokuman", "özet çıkar", "kitapçık"])
+    if _pdf_intent:
+        system += (
+            "\n\n[KRİTİK TALİMAT - AGGRESSIVE TOOL EXECUTION (CLAUDE CODE PROTOCOL)]:\n"
+            "Kullanıcı bir PDF/belge/rapor istedi veya doküman üretilmesini talep ediyor.\n"
+            "NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. "
+            "If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.\n"
+            "ASLA nasıl yapılacağını anlatma! ASLA 'Python ile şöyle yapabilirsiniz' veya kod örneği verme!\n"
+            "MUTLAKA ve DERHAL `generate_pdf` fonksiyon çağrısını (tool_call) çalıştır!\n"
+            "Parametreler: 'title' (belge başlığı), 'content' (kapsamlı, zengin markdown içeriği).\n"
+            "İçerik hazırlandığında araç tarafından dönen dosya indirme bağlantısını kullanıcıya sun."
+        )
+
     # Tool Router: 35+ arac + skill araclari, mesaja gore ilgili olanlari sec
     # Kucuk/ucretsiz modeller bu sayede daha az kafasi karisir.
     # get_all_tools() her turda TAZE cagrilir - boylece bir skill panelden
@@ -2271,6 +2298,7 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
     # (arac cagrisi olmadan) bittiginde ve turda baska cagri yoksa
     # islenir — yoksa sessizce duser.
     jit_candidate = None
+    _last_pdf_info = None
     for _ in range(10):
         try:
             msg_content, msg_tool_calls, _used_layer = await stream_via_router(
@@ -2452,6 +2480,13 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
                     results = [await execute_tool_async(n, a, websocket) for _, n, a in parsed_calls]
 
             for (tc, name, args), result in zip(parsed_calls, results):
+                if name == "generate_pdf":
+                    try:
+                        _pdata = json.loads(result) if isinstance(result, str) else result
+                        if isinstance(_pdata, dict) and _pdata.get("ok"):
+                            _last_pdf_info = _pdata
+                    except Exception:
+                        pass
                 if name == "get_worldview":
                     await websocket.send_json({"type":"worldview","content":result})
                 # UI'ya TAM sonuc gider (kullanici kirpilmis cikti gormesin),
@@ -2536,6 +2571,21 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
             active_tools = expand_after_tool_call(active_tools, used_names, all_tools_now)
         else:
             final = msg_content or ""
+            # PDF bağlantısının yanıtta kesinlikle yer almasını garanti et (Claude clone garantisi)
+            if _last_pdf_info and _last_pdf_info.get("url"):
+                _pdf_url = _last_pdf_info["url"]
+                _pdf_fn = _last_pdf_info.get("filename", "Belge.pdf")
+                if _pdf_url not in final and _pdf_fn not in final:
+                    final = (final.strip() + f"\n\n📄 **Oluşturulan PDF Belgesi:** [{_pdf_fn}]({_pdf_url})").strip()
+            elif _pdf_intent and not turn_calls and document_generator:
+                try:
+                    _gen_res = document_generator.generate_pdf("Belge", final or user_message)
+                    if _gen_res.get("ok"):
+                        _pdf_url = _gen_res["url"]
+                        _pdf_fn = _gen_res["filename"]
+                        final = (final.strip() + f"\n\n📄 **Oluşturulan PDF Belgesi:** [{_pdf_fn}]({_pdf_url})").strip()
+                except Exception as _pdf_err:
+                    print(f"[PDF] Otomatik fallback hatası: {_pdf_err}")
             add_short("assistant", final, conv_id)
             log_event(f"Konuşma: {user_message[:50]}")
             # ANLAMSAL CACHE'E YAZ — sadece cache'lenebilir sorular saklanir
@@ -3552,14 +3602,22 @@ async def speak_test(data: dict):
     yanitinda donuyor, frontend aninda <audio> ile calıyor."""
     cfg = load_config()
     text = data.get("text") or "Merhaba Ali. Ben ALES. Sesimi nasil buluyorsun?"
+    key = (
+        data.get("elevenlabs_key")
+        or cfg.get("elevenlabs_key", "")
+        or get_key("elevenlabs_key")
+        or os.environ.get("ELEVENLABS_API_KEY", "")
+        or os.environ.get("ELEVENLABS_KEY", "")
+    )
+    if isinstance(key, str): key = key.strip()
     voice_id = data.get("voice_id") or cfg.get("elevenlabs_voice") or DEFAULT_ELEVENLABS_VOICE
-    key = data.get("elevenlabs_key") if "elevenlabs_key" in data else cfg.get("elevenlabs_key","")
     edge_voice = data.get("edge_voice") or cfg.get("edge_voice") or DEFAULT_EDGE_VOICE
     loop = asyncio.get_event_loop()
     audio_bytes = await loop.run_in_executor(_executor, synthesize, text, key, voice_id, edge_voice)
     if not audio_bytes:
         return {"ok": False, "error": "Ses üretilemedi (key/bağlantı kontrol et)"}
-    return {"ok": True, "audio": base64.b64encode(audio_bytes).decode("ascii"), "mime": "audio/mpeg"}
+    mime = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
+    return {"ok": True, "audio": base64.b64encode(audio_bytes).decode("ascii"), "mime": mime}
 
 
 # ─── SKILLS (Ayarlar > Skills paneli icin) ────────────────────────
@@ -5071,14 +5129,25 @@ async def speak_api(payload: dict):
     audio_bytes = None
     try:
         cfg = load_config()
+        key = (
+            payload.get("elevenlabs_key")
+            or cfg.get("elevenlabs_key", "")
+            or get_key("elevenlabs_key")
+            or os.environ.get("ELEVENLABS_API_KEY", "")
+            or os.environ.get("ELEVENLABS_KEY", "")
+        )
+        if isinstance(key, str): key = key.strip()
+        voice_id = payload.get("voice_id") or cfg.get("elevenlabs_voice") or voice.DEFAULT_ELEVENLABS_VOICE
+        edge_voice = payload.get("edge_voice") or cfg.get("edge_voice") or voice.DEFAULT_EDGE_VOICE
+
         if voice:
             try:
                 loop = asyncio.get_running_loop()
                 audio_bytes = await loop.run_in_executor(
                     _executor, voice.synthesize, cleaned,
-                    cfg.get("elevenlabs_key", ""),
-                    cfg.get("elevenlabs_voice") or voice.DEFAULT_ELEVENLABS_VOICE,
-                    cfg.get("edge_voice") or "tr-TR-AhmetNeural",
+                    key,
+                    voice_id,
+                    edge_voice,
                 )
             except Exception as ve:
                 print(f"[SPEAK] voice.synthesize hatasi: {ve}")

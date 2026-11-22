@@ -146,6 +146,10 @@ Kullanıcı bunları isterse "Bu özellik masaüstü ALES uygulamasında çalı�
 
 YAPABİLDİKLERİN: Sohbet, genel kültür, felsefe, havacılık, bilim, analiz, stratejik tavsiye, çoklu-perspektif değerlendirme.
 
+AGGRESSIVE TOOL EXECUTION (CLAUDE PROTOCOL):
+- NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.
+- Kullanıcı bir PDF, rapor veya doküman dosyası oluşturulmasını istediğinde ASLA nasıl yapılacağını veya Python kodunu anlatma; doğrudan içeriği üret ve PDF bağlantısını ver.
+
 Türkçe konuş, kısa ve net ol. Tarih: {now}"""
 
 # ─── TEK-TURLU SOHBET: SAĞLAYICI DÜŞEN SIRA (FALLBACK ZİNCİRİ) ────
@@ -641,9 +645,17 @@ async def cloud_speak_api(payload: dict):
         import voice
         import config_manager as cm
         cfg = cm.load_config()
-        key = payload.get("elevenlabs_key") or _SESSION_KEYS.get("elevenlabs_key") or cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY", "")
-        voice_id = payload.get("voice_id") or cfg.get("elevenlabs_voice") or voice.DEFAULT_ELEVENLABS_VOICE
-        edge_voice = payload.get("edge_voice") or cfg.get("edge_voice") or "tr-TR-AhmetNeural"
+        key = (
+            payload.get("elevenlabs_key")
+            or _SESSION_KEYS.get("elevenlabs_key")
+            or cfg.get("elevenlabs_key")
+            or cm.get_key("elevenlabs_key")
+            or os.environ.get("ELEVENLABS_API_KEY", "")
+            or os.environ.get("ELEVENLABS_KEY", "")
+        )
+        if isinstance(key, str): key = key.strip()
+        voice_id = payload.get("voice_id") or cfg.get("elevenlabs_voice") or getattr(voice, "DEFAULT_ELEVENLABS_VOICE", "pNInz6obpgDQGcFmaJgB")
+        edge_voice = payload.get("edge_voice") or cfg.get("edge_voice") or getattr(voice, "DEFAULT_EDGE_VOICE", "tr-TR-AhmetNeural")
 
         loop = asyncio.get_event_loop()
         clean = voice._clean_for_speech(text) if hasattr(voice, "_clean_for_speech") else text

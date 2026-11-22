@@ -71,32 +71,44 @@ function renderMessageContent(text) {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            color: '#fca5a5',
-            padding: '4px 10px',
-            borderRadius: 6,
+            gap: 8,
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(185, 28, 28, 0.35))',
+            border: '1px solid rgba(239, 68, 68, 0.55)',
+            color: '#fecaca',
+            padding: '6px 14px',
+            borderRadius: 8,
             textDecoration: 'none',
             fontWeight: 600,
             fontSize: 13,
-            margin: '4px 2px',
+            margin: '6px 2px',
             cursor: 'pointer',
             verticalAlign: 'middle',
-            transition: 'all 0.15s'
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)',
+            transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'
+            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.38), rgba(185, 28, 28, 0.52))'
             e.currentTarget.style.color = '#ffffff'
+            e.currentTarget.style.transform = 'translateY(-1px)'
+            e.currentTarget.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.35)'
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'
-            e.currentTarget.style.color = '#fca5a5'
+            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(185, 28, 28, 0.35))'
+            e.currentTarget.style.color = '#fecaca'
+            e.currentTarget.style.transform = 'translateY(0)'
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)'
           }}
         >
-          <span>📄</span>
+          <span style={{ fontSize: 16 }}>📄</span>
           <span>{label.endsWith('.pdf') ? label : `${label}.pdf`}</span>
-          <span style={{ fontSize: 11, opacity: 0.8 }}>⬇ İndir</span>
+          <span style={{
+            fontSize: 11,
+            background: 'rgba(239, 68, 68, 0.35)',
+            padding: '2px 8px',
+            borderRadius: 5,
+            fontWeight: 700,
+            marginLeft: 4
+          }}>PDF'yi İndir ⬇</span>
         </a>
       )
     } else {
@@ -690,6 +702,13 @@ export default function App() {
     }
   }, [tab])
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+  const showToast = useCallback((msg, duration = 4000) => {
+    setToast(msg)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), duration)
+  }, [])
   const [streamFrame, setStreamFrame] = useState(null)
   const [streamActive, setStreamActive] = useState(false)
   const [streamTasks, setStreamTasks] = useState([])
@@ -967,7 +986,10 @@ export default function App() {
           try { mediaStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
           mediaStreamRef.current = null
         }
-        if (chunks.length === 0) return
+        if (chunks.length === 0) {
+          showToast("Mikrofon çalışmadı, metin olarak yazabilirsiniz.")
+          return
+        }
         setTranscribing(true)
         const blob = new Blob(chunks, { type: mimeType || 'audio/webm' })
         const formData = new FormData()
@@ -983,11 +1005,13 @@ export default function App() {
           const res = await resp.json()
           if (res.ok && res.text) {
             setInput(prev => prev ? (prev.trim() + ' ' + res.text.trim()) : res.text.trim())
-          } else if (res.error) {
+          } else {
             console.warn("Transkripsiyon hatası:", res.error)
+            showToast("Mikrofon çalışmadı, metin olarak yazabilirsiniz.")
           }
         } catch (err) {
           console.warn("Transkripsiyon ağı hatası:", err)
+          showToast("Mikrofon çalışmadı, metin olarak yazabilirsiniz.")
         } finally {
           setTranscribing(false)
         }
@@ -1007,7 +1031,7 @@ export default function App() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition
       if (!SR) {
         setListening(false)
-        alert("Mikrofon erişimi alınamadı veya ses kaydı bu ortamda desteklenmiyor.")
+        showToast("Mikrofon çalışmadı, metin olarak yazabilirsiniz.")
         return
       }
       const rec = new SR()
@@ -1025,6 +1049,7 @@ export default function App() {
         console.warn("Web Speech API hatası:", err)
         setListening(false)
         recRef.current = null
+        showToast("Mikrofon çalışmadı, metin olarak yazabilirsiniz.")
       }
       rec.onend = () => {
         setListening(false)
@@ -1036,7 +1061,7 @@ export default function App() {
     } catch (err) {
       console.warn("Web Speech API başlatılamadı:", err)
       setListening(false)
-      alert("Mikrofon başlatılamadı. Lütfen mikrofon izinlerini kontrol edin.")
+      showToast("Mikrofon çalışmadı, metin olarak yazabilirsiniz.")
     }
   }
 
@@ -1136,13 +1161,37 @@ export default function App() {
         setActiveConvId(d.id)
         loadConversations()
       } else if (d.type==='audio') {
-        // ChatGPT'deki gibi aninda ses: backend artik mp3 dosyasi acmiyor,
-        // ham ses verisini burada <audio> ile hemen calıyoruz - hangi
-        // cihazdan (PC/telefon) bakiliyorsa sesi de o cihaz veriyor.
+        // Backend TTS ses verisi geldiğinde ses oynatıcı (ChatGPT/Claude tarzı anında ses)
         try {
+          if (audioElRef.current) {
+            try { audioElRef.current.pause() } catch {}
+            audioElRef.current = null
+          }
           const audio = new Audio(`data:${d.mime||'audio/mpeg'};base64,${d.data}`)
-          audio.play().catch(()=>{})
-        } catch {}
+          audioElRef.current = audio
+          setSpeaking(true)
+          audio.onended = () => {
+            setSpeaking(false)
+            audioElRef.current = null
+          }
+          audio.onerror = () => {
+            setSpeaking(false)
+            audioElRef.current = null
+          }
+          const playPromise = audio.play()
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              audioUnlockedRef.current = true
+              setAudioBlocked(false)
+            }).catch((err) => {
+              console.warn("Autoplay engellendi:", err)
+              setAudioBlocked(true)
+              setSpeaking(false)
+            })
+          }
+        } catch (e) {
+          console.warn("Audio play error:", e)
+        }
       } else if (d.type==='earnings') {
         // Canli kazanc guncellemesi: pano acikken sayfayi yenilemeye gerek
         // kalmadan sayac/grafik aninda guncellenir (WebSocket push).
@@ -1531,6 +1580,48 @@ export default function App() {
       {/* BG */}
       <div style={{position:'absolute',inset:0,backgroundImage:'linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)',backgroundSize:'52px 52px',pointerEvents:'none'}} />
       <div style={{position:'absolute',top:-400,left:'50%',transform:'translateX(-50%)',width:900,height:700,background:'radial-gradient(ellipse,rgba(255,255,255,0.04) 0%,transparent 70%)',pointerEvents:'none'}} />
+
+      {/* TOAST BİLDİRİMİ */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 76,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 99999,
+          background: 'rgba(28, 28, 32, 0.96)',
+          border: '1px solid rgba(239, 68, 68, 0.5)',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+          color: '#fca5a5',
+          padding: '8px 18px',
+          borderRadius: 10,
+          fontSize: 13,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          backdropFilter: 'blur(12px)',
+          pointerEvents: 'auto',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <span style={{ fontSize: 16 }}>⚠️</span>
+          <span>{toast}</span>
+          <button
+            onClick={() => setToast(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#9ca3af',
+              fontSize: 14,
+              cursor: 'pointer',
+              marginLeft: 8,
+              padding: 0
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* TITLEBAR */}
       <div className="app-titlebar" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',height:48,background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,zIndex:10,WebkitAppRegion:'drag'}}>
@@ -2437,12 +2528,26 @@ export default function App() {
               justifyContent:'center',
               background:listening ? 'rgba(239,68,68,0.25)' : '#1E1E24',
               boxShadow:listening ? '0 0 12px rgba(239,68,68,0.5)' : 'none',
-              transition:'all .2s'
+              transition:'all .2s',
+              position:'relative'
             }}
             title={transcribing ? "Ses işleniyor (Whisper)..." : (listening ? "Dinlemeyi Durdur" : "Sesle Yaz (Mikrofon)")}
             onClick={listening ? stopListening : startListening}
           >
             {transcribing ? '⏳' : '🎤'}
+            {listening && (
+              <span style={{
+                position:'absolute',
+                top:3,
+                right:3,
+                width:8,
+                height:8,
+                borderRadius:'50%',
+                background:'#ef4444',
+                boxShadow:'0 0 8px #ef4444',
+                animation:'pulse 1s infinite'
+              }} />
+            )}
           </button>
           <textarea ref={inputRef} className="chat-input" style={{flex:1,background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,padding:'10px 12px',color:'#E4E4E7',fontSize:14,fontFamily:"'Inter',sans-serif",resize:'none',lineHeight:1.5,userSelect:'text',transition:'border-color .2s'}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder={showOnboarding ? 'Lütfen önce API anahtarınızı kaydedin...' : (connected?(transcribing?'Ses yazıya çevriliyor...':(listening?'Dinleniyor...':"ALES'e yaz...")):'Backend baslatiliyor...')} disabled={!connected||thinking||showOnboarding} rows={1} />
           <button style={{width:40,height:40,flexShrink:0,background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 0 12px rgba(255,255,255,0.25)',opacity:(!connected||thinking||!input.trim()||showOnboarding)?0.25:1,transition:'opacity .2s'}} onClick={send} disabled={!connected||thinking||!input.trim()||showOnboarding}>▶</button>

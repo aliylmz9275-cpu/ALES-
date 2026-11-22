@@ -803,6 +803,16 @@ def set_council(**kw) -> dict:
 SYSTEM_PROMPTS_FILE = APPDATA / 'system_prompts.json'
 _LOCAL_PROMPTS = Path(__file__).parent / 'system_prompts.json'
 
+# ─── AGGRESSIVE TOOL EXECUTION (CLAUDE PROTOCOL) ──────────────────
+CLAUDE_TOOL_RULES = (
+    "AGGRESSIVE TOOL EXECUTION (CLAUDE CODE PROTOCOL):\n"
+    "NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. "
+    "If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.\n"
+    "Kullanıcının isteği bir araç, dosya oluşturma, kod çalıştırma, sistem kontrolü, canlı arama veya PDF üretimi içeriyorsa, "
+    "ASLA nasıl yapılacağını anlatma; ARACI ÇAĞIRIP HEMEN YAP!"
+)
+
+
 
 def load_system_prompts() -> dict:
     """system_prompts.json: once AppData (kullanici duzenlemesi kalici),
