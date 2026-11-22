@@ -110,15 +110,13 @@ def _member_roster() -> list:
 
     if get_key("groq_key"):
         roster.append({
-            "name": "Groq (Llama 3.3 70B)", "provider": "groq",
-            "call": lambda p, s: _call_openai_compatible(
-                "groq", "llama-3.3-70b-versatile", p, s)})
+            "name": "Groq", "provider": "groq",
+            "call": multi_agent._call_groq})
 
     if get_key("cerebras_key"):
         roster.append({
-            "name": "Cerebras (Llama 3.3 70B)", "provider": "cerebras",
-            "call": lambda p, s: _call_openai_compatible(
-                "cerebras", "llama-3.3-70b", p, s)})
+            "name": "Cerebras", "provider": "cerebras",
+            "call": multi_agent._call_cerebras})
 
     # DeepSeek — NVIDIA NIM uzerinden (multi_agent'taki hazir cagirici).
     # Model kimligi config_manager.DEFAULT_MODELS['unrestricted'] ile AYNI
@@ -202,8 +200,7 @@ async def _run_judge(prompt: str, judge_prompt: str, timeout_s: float,
     if get_key("gemini_key"):
         candidates.append(("gemini", multi_agent._call_gemini))
     if get_key("groq_key"):
-        candidates.append(("groq", lambda p, s: _call_openai_compatible(
-            "groq", "llama-3.3-70b-versatile", p, s)))
+        candidates.append(("groq", multi_agent._call_groq))
     if get_key("openrouter_key"):
         candidates.append(("openrouter", multi_agent._call_openrouter))
 

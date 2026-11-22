@@ -72,8 +72,9 @@ def _catalog_totals() -> int:
 
 
 def _reconcile() -> Dict[str, Any]:
-    """Yapilandirilmis katmanlari katalogla karsilastir. HTTP YAPMAZ —
-    registry'nin elindeki veriyi okur, bu yuzden bedava ve hizlidir."""
+    """Yapilandirilmis katmanlari canli saglayici kataloguyla karsilastir.
+    Eksik/kullanimdan kaldirilmis bir model varsa EN IYI ALTERNATIFE otomatik gecirir,
+    model_cache.json ve config.json'u dinamik gunceller."""
     if model_registry is None:
         return {"ok": False, "error": "model_registry modulu yuklenemedi"}
 
@@ -82,30 +83,73 @@ def _reconcile() -> Dict[str, Any]:
 
     deprecated: List[Dict[str, Any]] = []
     unverifiable: List[str] = []
+    applied_changes = 0
+
+    try:
+        import config_manager
+        cfg = config_manager.load_config()
+        models_cfg = cfg.setdefault("models", {})
+    except Exception:
+        config_manager = None
+        cfg = {}
+        models_cfg = {}
+    cfg_modified = False
+
     for r in rows:
+        layer = r.get("layer")
+        prov = r.get("provider")
+        dead_model = r.get("model")
+
         if r.get("known") is False:
             sug = list(r.get("suggestions") or [])
+            alt = reg.pick_alternative(prov, dead_model)
+            if not alt and sug:
+                alt = sug[0]
+
             deprecated.append({
-                "layer": r.get("layer"), "provider": r.get("provider"),
-                "model": r.get("model"), "suggestions": sug[:3],
+                "layer": layer, "provider": prov,
+                "model": dead_model, "suggestions": sug[:3],
+                "auto_switched_to": alt,
             })
             _stats["deprecated_detected"] += 1
             if sug:
                 _stats["alternatives_suggested"] += 1
+
+            if alt and alt != dead_model:
+                # 1. Registry override ve kara liste
+                reg.add_blacklist(prov, dead_model, "canli katalogda yok")
+                reg.set_override(prov, dead_model, alt, "auto-discovery")
+                applied_changes += 1
+
+                # 2. config.json guncelle
+                if layer and config_manager:
+                    if layer not in models_cfg:
+                        models_cfg[layer] = {}
+                    models_cfg[layer]["provider"] = prov
+                    models_cfg[layer]["model"] = alt
+                    cfg_modified = True
+
+                msg = f"⚠️ Model {dead_model} removed. Auto-switched to Model {alt}."
+                print(f"[AUTO_DISCOVERY] {msg} (Katman: {layer}, Saglayici: {prov})")
+                try:
+                    config_manager.append_action_log("auto_discovery", f"{prov}: {msg}")
+                except Exception:
+                    pass
         elif r.get("known") is None:
-            unverifiable.append(r.get("layer"))
+            unverifiable.append(layer)
             _stats["unverifiable"] += 1
+
+    if cfg_modified and config_manager:
+        try:
+            config_manager.save_config(cfg)
+            reg.save_cache()
+            print(f"[AUTO_DISCOVERY] config.json ve model_cache.json {applied_changes} model icin dinamik guncellendi.")
+        except Exception as e:
+            print(f"[AUTO_DISCOVERY] config kaydetme hatasi: {e}")
 
     _stats["reconciles_completed"] += 1
     _stats["last_reconcile"] = time.time()
     _stats["models_discovered"] = _catalog_totals()
-
-    if deprecated:
-        for d in deprecated:
-            print(f"[AUTO_DISCOVERY] {d['layer']} ({d['provider']}/{d['model']}) "
-                  f"saglayici katalogunda YOK · oneri: "
-                  f"{', '.join(d['suggestions']) or 'yok'} · "
-                  f"karar VERILMEDI, cagri yine denenecek")
 
     return {
         "ok": True,
@@ -113,10 +157,8 @@ def _reconcile() -> Dict[str, Any]:
         "deprecated": deprecated,
         "unverifiable_layers": unverifiable,
         "total_models_available": _stats["models_discovered"],
-        # Acikca: hicbir sey uygulanmadi.
-        "applied_changes": 0,
-        "note": ("Tespitler yalnizca rapordur; katman kapatilmaz veya "
-                 "degistirilmez. Katalog eksik olabilir."),
+        "applied_changes": applied_changes,
+        "note": f"{applied_changes} model alternatiflerine otomatik gecirildi." if applied_changes > 0 else "Tum modeller canli katalogda dogrulandi.",
     }
 
 
@@ -147,9 +189,9 @@ async def run_discovery_now() -> Dict[str, Any]:
 
 
 async def _background_reconcile_loop():
-    """Registry'nin tazelemesinden RECONCILE_OFFSET_S sonra dogrula."""
+    """Registry'nin tazelemesinden sonra dogrula ve eksik modelleri otomatik iyilestir."""
     try:
-        await asyncio.sleep(RECONCILE_OFFSET_S)
+        await asyncio.sleep(3.0)
         while True:
             try:
                 _reconcile()

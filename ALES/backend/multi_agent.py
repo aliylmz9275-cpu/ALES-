@@ -34,6 +34,23 @@ def _is_rate_limit(err: Exception) -> bool:
     s = str(err).lower()
     return "429" in s or "rate limit" in s or "rate_limit" in s or "quota" in s
 
+def _is_dead_model(err: Exception) -> bool:
+    s = str(err).lower()
+    return (
+        "404" in s
+        or "model_not_found" in s
+        or "does not exist" in s
+        or "decommissioned" in s
+        or "resource_not_found" in s
+        or "deprecated" in s
+        or "not found" in s
+    )
+
+try:
+    import model_registry
+except ImportError:
+    model_registry = None
+
 # ─── API CAGIRICILARI (her biri (basarili: bool, metin: str) doner) ─
 
 import functools
@@ -81,7 +98,7 @@ _call_glm51 = functools.partial(_call_nvidia, model="zhipuai/glm-5.1")
 _call_qwen3_coder = functools.partial(_call_nvidia, model="qwen/qwen3-coder-480b-a35b-instruct")
 
 async def _call_groq(prompt: str, system: str) -> tuple[bool, str]:
-    """Groq Cloud Llama-3.3-70b cagiricisi."""
+    """Groq Cloud cagiricisi (dinamik model secimi + 404 self-healing)."""
     try:
         from config_manager import get_key
         key = get_key("groq_key") or os.environ.get("GROQ_API_KEY", "")
@@ -94,16 +111,28 @@ async def _call_groq(prompt: str, system: str) -> tuple[bool, str]:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=key)
 
+        model_name = "openai/gpt-oss-120b"
+        if model_registry and hasattr(model_registry, "registry"):
+            model_name = model_registry.registry.effective_model("groq", model_name)
+
         for attempt in range(3):
             try:
                 r = await client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model=model_name,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": prompt}],
                     max_tokens=1500, temperature=0.6,
                 )
                 return True, (r.choices[0].message.content or "").strip()
             except Exception as e:
+                if _is_dead_model(e) and model_registry and hasattr(model_registry, "registry"):
+                    try:
+                        alt = await model_registry.registry.heal("groq", model_name, str(e))
+                        if alt and alt != model_name:
+                            model_name = alt
+                            continue
+                    except Exception:
+                        pass
                 if _is_rate_limit(e):
                     await asyncio.sleep(2 ** attempt)
                 else:
@@ -114,7 +143,7 @@ async def _call_groq(prompt: str, system: str) -> tuple[bool, str]:
 
 
 async def _call_cerebras(prompt: str, system: str) -> tuple[bool, str]:
-    """Cerebras Cloud Llama-3.1-70b cagiricisi."""
+    """Cerebras Cloud cagiricisi (dinamik model secimi + 404 self-healing)."""
     try:
         from config_manager import get_key
         key = get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY", "")
@@ -127,16 +156,28 @@ async def _call_cerebras(prompt: str, system: str) -> tuple[bool, str]:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(base_url="https://api.cerebras.ai/v1", api_key=key)
 
+        model_name = "gpt-oss-120b"
+        if model_registry and hasattr(model_registry, "registry"):
+            model_name = model_registry.registry.effective_model("cerebras", model_name)
+
         for attempt in range(3):
             try:
                 r = await client.chat.completions.create(
-                    model="llama3.1-70b",
+                    model=model_name,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": prompt}],
                     max_tokens=1500, temperature=0.6,
                 )
                 return True, (r.choices[0].message.content or "").strip()
             except Exception as e:
+                if _is_dead_model(e) and model_registry and hasattr(model_registry, "registry"):
+                    try:
+                        alt = await model_registry.registry.heal("cerebras", model_name, str(e))
+                        if alt and alt != model_name:
+                            model_name = alt
+                            continue
+                    except Exception:
+                        pass
                 if _is_rate_limit(e):
                     await asyncio.sleep(2 ** attempt)
                 else:
@@ -146,9 +187,7 @@ async def _call_cerebras(prompt: str, system: str) -> tuple[bool, str]:
         return False, f"Cerebras beklenmeyen hata: {e}"
 
 async def _call_gemini(prompt: str, system: str) -> tuple[bool, str]:
-    """Google Gemini (gemini-2.0-flash) OpenAI-uyumlu endpoint uzerinden.
-    main.py, Groq+Cerebras ikisi de duştugunde duz-metin yedegi olarak
-    cagirir. Key yoksa/hata -> (False, sebep)."""
+    """Google Gemini OpenAI-uyumlu endpoint (dinamik model secimi + 404 self-healing)."""
     try:
         from openai import AsyncOpenAI
         from config_manager import get_key
@@ -158,15 +197,28 @@ async def _call_gemini(prompt: str, system: str) -> tuple[bool, str]:
         client = AsyncOpenAI(
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             api_key=key)
+
+        model_name = "gemini-3.8-flash"
+        if model_registry and hasattr(model_registry, "registry"):
+            model_name = model_registry.registry.effective_model("gemini", model_name)
+
         for attempt in range(3):
             try:
                 r = await client.chat.completions.create(
-                    model="gemini-2.0-flash",
+                    model=model_name,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": prompt}],
                     max_tokens=1500, temperature=0.6)
                 return True, (r.choices[0].message.content or "").strip()
             except Exception as e:
+                if _is_dead_model(e) and model_registry and hasattr(model_registry, "registry"):
+                    try:
+                        alt = await model_registry.registry.heal("gemini", model_name, str(e))
+                        if alt and alt != model_name:
+                            model_name = alt
+                            continue
+                    except Exception:
+                        pass
                 if _is_rate_limit(e):
                     await asyncio.sleep(2 ** attempt)
                 else:
@@ -179,8 +231,7 @@ async def _call_gemini(prompt: str, system: str) -> tuple[bool, str]:
 
 
 async def _call_sambanova(prompt: str, system: str) -> tuple[bool, str]:
-    """SambaNova Cloud (Llama 3.3 70B) OpenAI-uyumlu endpoint uzerinden.
-    Groq/Cerebras/Gemini duştugunde ek duz-metin yedegi. Key yoksa atlanir."""
+    """SambaNova Cloud OpenAI-uyumlu endpoint (dinamik model secimi + 404 self-healing)."""
     try:
         from openai import AsyncOpenAI
         from config_manager import get_key
@@ -188,15 +239,28 @@ async def _call_sambanova(prompt: str, system: str) -> tuple[bool, str]:
         if not key:
             return False, "SambaNova key eksik"
         client = AsyncOpenAI(base_url="https://api.sambanova.ai/v1", api_key=key)
+
+        model_name = "Meta-Llama-3.3-70B-Instruct"
+        if model_registry and hasattr(model_registry, "registry"):
+            model_name = model_registry.registry.effective_model("sambanova", model_name)
+
         for attempt in range(3):
             try:
                 r = await client.chat.completions.create(
-                    model="Meta-Llama-3.3-70B-Instruct",
+                    model=model_name,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": prompt}],
                     max_tokens=1500, temperature=0.6)
                 return True, (r.choices[0].message.content or "").strip()
             except Exception as e:
+                if _is_dead_model(e) and model_registry and hasattr(model_registry, "registry"):
+                    try:
+                        alt = await model_registry.registry.heal("sambanova", model_name, str(e))
+                        if alt and alt != model_name:
+                            model_name = alt
+                            continue
+                    except Exception:
+                        pass
                 if _is_rate_limit(e):
                     await asyncio.sleep(2 ** attempt)
                 else:

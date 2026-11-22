@@ -184,17 +184,25 @@ _MODEL_DEAD_PAT = re.compile(
 
 
 def _is_dead_model_error(text) -> bool:
-    """Hata metni 'bu model kimligi artik gecersiz' diyor mu?"""
+    """Hata metni veya istisna 'bu model kimligi artik gecersiz (404/model_not_found)' diyor mu?"""
+    # HTTP status code denetimi (404 Not Found)
+    code = getattr(text, "status_code", None) or getattr(getattr(text, "response", None), "status_code", None)
+    if code == 404:
+        return True
+
     s = str(text)
-    if not _MODEL_DEAD_PAT.search(s):
-        return False
-    # Kimlik dogrulama/kota hatalarini DISLA: bunlar model adiyla ilgili
-    # degil ve kara listeye girmemeli.
-    if re.search(r"(invalid[_ ]api[_ ]key|unauthorized|authentication"
-                 r"|rate[_ ]limit|quota|insufficient|billing|payment"
-                 r"|permission)", s, re.I):
-        return False
-    return True
+    low = s.lower()
+    if "model_not_found" in low or "model_decommissioned" in low or "not_found" in low:
+        return True
+
+    if "404" in s and any(k in low for k in ("model", "resource", "not found", "does not exist")):
+        return True
+
+    if _MODEL_DEAD_PAT.search(s):
+        if not re.search(r"(invalid[_ ]api[_ ]key|unauthorized|authentication|rate[_ ]limit|quota|insufficient|billing|payment)", s, re.I):
+            return True
+
+    return False
 
 
 def _resolve_model(provider: str, model: str, lname: str) -> tuple:
@@ -238,9 +246,20 @@ async def _heal_model(provider: str, model: str, err: str, lname: str) -> str:
         return ""
     try:
         alt = await model_registry.registry.heal(provider, model, err)
-        if alt:
-            print(f"[ROUTER] {lname}: {provider}/{model} -> {alt} "
-                  f"(otomatik duzeltildi, yeniden deneniyor)")
+        if alt and alt != model:
+            print(f"[ROUTER] ⚠️ Model {model} removed. Auto-switched to Model {alt}.")
+            try:
+                import config_manager
+                cfg = config_manager.load_config()
+                models_cfg = cfg.setdefault("models", {})
+                if lname:
+                    if lname not in models_cfg:
+                        models_cfg[lname] = {}
+                    models_cfg[lname]["provider"] = provider
+                    models_cfg[lname]["model"] = alt
+                    config_manager.save_config(cfg)
+            except Exception:
+                pass
         return alt
     except Exception as e:
         print(f"[ROUTER] {lname}: iyilestirme basarisiz: {e}")
@@ -309,7 +328,7 @@ async def _call_layer(layer: dict, messages: list, timeout: float,
     if client is None:
         # Heavy katmanı için akıllı kurtarma: Eğer Gemini anahtarı yoksa NVIDIA DeepSeek V4 veya Groq ile kurtar
         if lname == "heavy":
-            for fb_prov, fb_mod in [("nvidia", "deepseek-ai/deepseek-v4"), ("groq", "llama-3.3-70b-versatile")]:
+            for fb_prov, fb_mod in [("nvidia", "deepseek-ai/deepseek-v4"), ("groq", "openai/gpt-oss-120b")]:
                 fb_client = get_client(fb_prov)
                 if fb_client is not None:
                     provider = fb_prov

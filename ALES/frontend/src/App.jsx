@@ -721,9 +721,28 @@ export default function App() {
   }, [tab])
 
   useEffect(() => {
+    try {
+      const savedKeys = JSON.parse(localStorage.getItem('ales_saved_api_keys') || '{}')
+      const savedMode = localStorage.getItem('ales_selected_mode') || ''
+      if (Object.keys(savedKeys).length > 0 || savedMode) {
+        authFetch(`${API_URL}/api/session/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys: savedKeys, mode: savedMode })
+        }).catch(() => {})
+      }
+    } catch (e) {}
+
     authFetch(`${API_URL}/config`).then(r => r.json()).then(cfg => {
       if (cfg && !cfg.groq_key && !cfg.gemini_key && !cfg.cerebras_key && !cfg.nvidia_key && !cfg.openrouter_key) {
-        setShowOnboarding(true)
+        try {
+          const savedKeys = JSON.parse(localStorage.getItem('ales_saved_api_keys') || '{}')
+          if (Object.keys(savedKeys).length === 0) {
+            setShowOnboarding(true)
+          }
+        } catch {
+          setShowOnboarding(true)
+        }
       }
     }).catch(() => {})
   }, [])
@@ -1023,7 +1042,17 @@ export default function App() {
     if (wsRef.current?.readyState===WebSocket.OPEN) return
     const ws = new WebSocket(isCloud ? `${WS_URL}?key=${encodeURIComponent(getCloudKey())}` : WS_URL)
     wsRef.current = ws
-    ws.onopen = ()=>{ setConnected(true); clearTimeout(reconnectRef.current) }
+    ws.onopen = ()=>{
+      setConnected(true);
+      clearTimeout(reconnectRef.current);
+      try {
+        const savedKeys = JSON.parse(localStorage.getItem('ales_saved_api_keys') || '{}')
+        const savedMode = localStorage.getItem('ales_selected_mode') || ''
+        if (Object.keys(savedKeys).length > 0 || savedMode) {
+          ws.send(JSON.stringify({ type: 'sync_session', keys: savedKeys, mode: savedMode }))
+        }
+      } catch (e) {}
+    }
     ws.onclose = (e)=>{
       setConnected(false); setThinking(false)
       // 4001: backend erisim anahtarini reddetti (cloud modu). Sonsuz
@@ -2353,6 +2382,7 @@ function ModeSelector() {
     if (busy || !data || id === data.active) return
     setBusy(true)
     try {
+      try { localStorage.setItem('ales_selected_mode', id) } catch (e) {}
       const r = await authFetch(API_URL+'/mode', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:id})})
       const d = await r.json()
       if (d.ok) setData(p=>({...p, active:d.mode, active_chain:d.active_chain||p.active_chain,
@@ -2837,11 +2867,29 @@ function MetricsPanel() {
 }
 
 function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, onAutoSpeakChange, isTab = false }) {
-  const [keys, setKeys] = useState({ groq:'', cerebras:'', elevenlabs:'', elevenlabs_voice: VOICE_OPTIONS[0].id, edge_voice: 'tr-TR-AhmetNeural', gemini:'', sambanova:'', openrouter:'', nvidia:'' })
+  const [keys, setKeys] = useState(() => {
+    const base = { groq:'', cerebras:'', elevenlabs:'', elevenlabs_voice: VOICE_OPTIONS[0].id, edge_voice: 'tr-TR-AhmetNeural', gemini:'', sambanova:'', openrouter:'', nvidia:'' }
+    try {
+      const saved = JSON.parse(localStorage.getItem('ales_saved_api_keys') || '{}')
+      return { ...base, ...saved }
+    } catch (e) {
+      return base
+    }
+  })
+  const [rememberKeys, setRememberKeys] = useState(() => {
+    try {
+      const r = localStorage.getItem('ales_remember_keys')
+      return r !== null ? r === 'true' : true
+    } catch (e) {
+      return true
+    }
+  })
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
   const [cloudStatus, setCloudStatus] = useState(null)
   const [serverCfg, setServerCfg] = useState(null)
+  const [refreshingModels, setRefreshingModels] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
 
   useEffect(() => {
     authFetch(API_URL+'/config').then(r=>r.json()).then(cfg=>{
@@ -2862,6 +2910,24 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     }
   }, [])
 
+  const refreshModels = async () => {
+    setRefreshingModels(true)
+    setRefreshMsg('')
+    try {
+      const res = await authFetch(API_URL + '/api/models/refresh', { method: 'POST' })
+      const data = await res.json()
+      if (data.ok) {
+        setRefreshMsg('✓ Canlı modeller tarandı ve otomatik onarıldı')
+      } else {
+        setRefreshMsg(`⚠️ Hata: ${data.error || 'Bilinmeyen hata'}`)
+      }
+    } catch (e) {
+      setRefreshMsg(`⚠️ Bağlantı hatası: ${e?.message || e}`)
+    }
+    setRefreshingModels(false)
+    setTimeout(() => setRefreshMsg(''), 6000)
+  }
+
   const save = async () => {
     const data = {}
     if (keys.groq.trim()) data.groq_key = keys.groq.trim()
@@ -2874,6 +2940,26 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
     if (keys.elevenlabs_voice) data.elevenlabs_voice = keys.elevenlabs_voice
     if (keys.edge_voice) data.edge_voice = keys.edge_voice
 
+    if (rememberKeys) {
+      try {
+        localStorage.setItem('ales_saved_api_keys', JSON.stringify({
+          groq: keys.groq.trim(),
+          cerebras: keys.cerebras.trim(),
+          elevenlabs: keys.elevenlabs.trim(),
+          gemini: keys.gemini.trim(),
+          sambanova: keys.sambanova.trim(),
+          openrouter: keys.openrouter.trim(),
+          nvidia: keys.nvidia.trim(),
+        }))
+        localStorage.setItem('ales_remember_keys', 'true')
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.removeItem('ales_saved_api_keys')
+        localStorage.setItem('ales_remember_keys', 'false')
+      } catch (e) {}
+    }
+
     if (isElectron) { try { await window.ales.saveConfig(data) } catch(e) {} }
     try {
       await authFetch(API_URL+'/config', {
@@ -2881,6 +2967,11 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(data)
       })
+      await authFetch(API_URL+'/api/session/sync', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ keys: data })
+      }).catch(()=>{})
       authFetch(API_URL+'/config').then(r=>r.json()).then(setServerCfg).catch(()=>{})
       if (isCloud) authFetch(API_URL+'/status').then(r=>r.json()).then(setCloudStatus).catch(()=>{})
     } catch(e) {}
@@ -3006,6 +3097,63 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
           {autoSpeak ? 'AÇIK' : 'KAPALI'}
         </button>
       </div>
+
+      {/* MODEL KEŞFİ & OTO-ONARIM */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14,flexWrap:'wrap',gap:10}}>
+        <div style={{display:'flex',flexDirection:'column'}}>
+          <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>MODEL KEŞFİ & KENDİNİ ONARMA</span>
+          <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>Canlı API'leri (Groq, Gemini, Cerebras) tara, ölü modelleri otomatik onar</span>
+          {refreshMsg && (
+            <span style={{fontSize:12,color:refreshMsg.startsWith('✓') ? '#4ade80' : '#f87171',marginTop:4,fontFamily:'monospace',fontWeight:600}}>{refreshMsg}</span>
+          )}
+        </div>
+        <button
+          onClick={refreshModels}
+          disabled={refreshingModels}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 6,
+            border: '1px solid rgba(255,255,255,0.3)',
+            background: refreshingModels ? '#333333' : '#222222',
+            color: '#ffffff',
+            fontWeight: 700,
+            fontSize: 13,
+            fontFamily:'monospace',
+            cursor: refreshingModels ? 'wait' : 'pointer'
+          }}
+        >
+          {refreshingModels ? '🔄 TARANIYOR...' : '🔄 MODELLERİ TARA'}
+        </button>
+      </div>
+
+      {/* BU CİHAZA KAYDET (BENİ HATIRLA) */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:8,marginBottom:14,flexWrap:'wrap',gap:10}}>
+        <div style={{display:'flex',flexDirection:'column'}}>
+          <span style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace'}}>BU CİHAZA KAYDET (BENİ HATIRLA)</span>
+          <span style={{fontSize:13,color:'#A1A1AA',marginTop:3}}>API anahtarlarını tarayıcıda saklar; sayfa yenilendiğinde veya sunucu yeniden başladığında otomatik yükler.</span>
+        </div>
+        <button
+          onClick={() => {
+            const next = !rememberKeys;
+            setRememberKeys(next);
+            try { localStorage.setItem('ales_remember_keys', String(next)); } catch {}
+          }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 6,
+            border: `1px solid ${rememberKeys ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
+            background: rememberKeys ? '#ffffff' : '#222222',
+            color: rememberKeys ? '#000000' : '#ffffff',
+            fontWeight: 700,
+            fontSize: 13,
+            fontFamily:'monospace',
+            cursor: 'pointer'
+          }}
+        >
+          {rememberKeys ? 'AÇIK (CİHAZDA SAKLANIYOR)' : 'KAPALI'}
+        </button>
+      </div>
+
       <div style={{display:'flex',gap:8}}>
         <button style={{flex:1,padding:'11px',background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontWeight:'bold',fontSize:13,cursor:'pointer',fontFamily:'monospace'}} onClick={save}>{saved?'✓ KAYDEDİLDİ':'KAYDET'}</button>
         {onClose && (

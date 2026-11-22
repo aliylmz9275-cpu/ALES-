@@ -99,7 +99,7 @@ def _openrouter_chat_blocking(system: str, user: str, images_b64: list = None) -
         content.append({"type": "image_url",
                         "image_url": {"url": f"data:image/jpeg;base64,{b}"}})
     payload = {
-        "model": "qwen/qwen-2.5-coder-32b-instruct" if not images_b64 else "google/gemini-flash-1.5",
+        "model": "qwen/qwen-2.5-coder-32b-instruct" if not images_b64 else "google/gemini-2.5-flash",
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": content if images_b64 else user}],
         "temperature": 0.1,
@@ -124,7 +124,7 @@ def _gemini_chat_blocking(system: str, user: str, images_b64: list = None) -> st
     for b in (images_b64 or []):
         parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b}})
     url = ("https://generativelanguage.googleapis.com/v1beta/models/"
-           f"gemini-1.5-flash:generateContent?key={key}")
+           f"gemini-3.8-flash:generateContent?key={key}")
     payload = {"contents": [{"parts": parts}],
                "generationConfig": {"temperature": 0.1}}
     with httpx.Client(timeout=20) as c:

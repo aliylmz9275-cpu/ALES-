@@ -160,6 +160,59 @@ _NOT_CHAT = re.compile(
 # surumler; bir uretim zincirini kendiliginden bunlara tasimak istemeyiz.
 _RISKY = re.compile(r"(preview|experimental|-exp\b|alpha|beta|nightly)", re.I)
 
+# Alanina ozel / zayif veya guvenlik amacli modelleri genel sohbet icin tercih etme
+_NOT_PREFERRED_CHAT = re.compile(
+    r"(allam|guard|prompt-guard|orpheus|canopylabs|native-audio|tts|live-translate|transcribe)",
+    re.I
+)
+
+# Saglayici bazli en iyi SOTA modeller (Groq -> openai/gpt-oss-120b, Gemini -> gemini-3.8-flash, vb.)
+_PROVIDER_PREFERRED_DEFAULTS = {
+    "groq": [
+        "openai/gpt-oss-120b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "openai/gpt-oss-20b",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+    ],
+    "gemini": [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+    ],
+    "cerebras": [
+        "gpt-oss-120b",
+        "qwen-3.8-27b",
+        "llama-3.3-70b",
+        "llama3.3-70b",
+        "llama3.1-70b",
+        "llama-3.1-70b",
+        "llama3.1-8b",
+    ],
+    "nvidia": [
+        "deepseek-ai/deepseek-v4-pro",
+        "deepseek-ai/deepseek-r1",
+        "meta/llama-3.3-70b-instruct",
+        "nvidia/llama-3.1-nemotron-70b-instruct",
+    ],
+    "sambanova": [
+        "Meta-Llama-3.3-70B-Instruct",
+        "Meta-Llama-3.1-70B-Instruct",
+        "Meta-Llama-3.1-8B-Instruct",
+        "Qwen2.5-72B-Instruct",
+    ],
+    "openrouter": [
+        "qwen/qwen3.8-27b",
+        "qwen/qwen-2.5-coder-32b-instruct",
+        "meta-llama/llama-3.3-70b-instruct",
+        "deepseek/deepseek-chat",
+    ]
+}
+
 # ── ISE YARAMAZ YEDEK ────────────────────────────────────────────────
 # "Boyle bir model yok" (404) ile KARISTIRILMAMALI. Asagidakiler model ADI
 # dogru oldugu halde modelin BU HESAPTA ya da BU IS ICIN kullanilamaz
@@ -306,11 +359,14 @@ class ModelRegistry:
     def load_cache(self) -> bool:
         """Son bilinen iyi listeyi diskten oku. Yoksa sessizce gec."""
         try:
-            if not self.cache_path.exists():
+            target_path = self.cache_path
+            if not target_path.exists() and Path("model_cache.json").exists():
+                target_path = Path("model_cache.json")
+            if not target_path.exists():
                 self._note("INFO", "onbellek dosyasi yok — ilk yenilemeye kadar "
                                    "config_manager.DEFAULT_MODELS gecerli")
                 return False
-            d = json.loads(self.cache_path.read_text(encoding="utf-8"))
+            d = json.loads(target_path.read_text(encoding="utf-8"))
         except Exception as e:
             self._note("WARN", f"onbellek okunamadi ({e}) — yok sayiliyor")
             return False
@@ -379,9 +435,13 @@ class ModelRegistry:
         try:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.cache_path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2),
-                           encoding="utf-8")
+            content = json.dumps(data, ensure_ascii=False, indent=2)
+            tmp.write_text(content, encoding="utf-8")
             os.replace(tmp, self.cache_path)
+            try:
+                Path("model_cache.json").write_text(content, encoding="utf-8")
+            except Exception:
+                pass
         except Exception as e:
             self._note("WARN", f"onbellek yazilamadi: {e}")
 
@@ -800,69 +860,102 @@ class ModelRegistry:
         return [i for _, i in scored[:limit]]
 
     def pick_alternative(self, provider: str, model: str) -> str:
-        """Otomatik degisim icin TEK aday. Yoksa "" doner.
+        """Otomatik degisim icin TEK aday. SOTA saglayici onceliklerine gore en iyi alternatifi secer."""
+        prov = (provider or "").lower().strip()
+        live_ids = self.ids_for(prov)
+        bl = self.blacklist.get(prov) or {}
+        pref_list = _PROVIDER_PREFERRED_DEFAULTS.get(prov, [])
 
-        Esik var: cok zayif bir benzerlik bulunca rastgele bir modele gecmek,
-        kullaniciyi habersiz bambaska (ve belki cok pahali) bir modele
-        tasimak olurdu. Emin olamiyorsak DEGISTIRMIYORUZ ve arayuze
-        "elle sec" diye yaziyoruz.
-        """
-        cands = self.suggest(provider, model, limit=1)
-        if not cands:
-            return ""
-        cand = cands[0]
-        import difflib
-        vendor_ok = ("/" not in model) or cand.startswith(model.split("/")[0] + "/")
-        ratio = difflib.SequenceMatcher(None, model.lower(), cand.lower()).ratio()
-        if not vendor_ok and ratio < 0.55:
-            self._note("WARN", f"{provider}/{model}: guvenli bir yedek "
-                               f"bulunamadi (en yakin: {cand}, benzerlik "
-                               f"{ratio:.2f}) — elle secim gerekiyor")
-            return ""
-        return cand
+        # 1. Once saglayicinin canli IDs icindeki oncelikli modelleri kontrol et (orn: Groq -> openai/gpt-oss-120b, Gemini -> gemini-3.8-flash)
+        if live_ids:
+            for pref in pref_list:
+                if pref in live_ids and pref not in bl and pref != model:
+                    return pref
+
+        # 2. String benzerligi ile arama yap (ozel isimli veya ayni aileden modeller icin)
+        cands = self.suggest(prov, model, limit=4)
+        if cands:
+            filtered_cands = [c for c in cands if not _NOT_PREFERRED_CHAT.search(c) and c != model]
+            if filtered_cands:
+                return filtered_cands[0]
+            if cands[0] != model:
+                return cands[0]
+
+        # 3. Canli listeden genel sohbet modeli sec
+        if live_ids:
+            for m_id in live_ids:
+                if (m_id not in bl and m_id != model and
+                        not _NOT_CHAT.search(m_id) and not _NOT_PREFERRED_CHAT.search(m_id)):
+                    return m_id
+
+        # 4. Canli liste yoksa oncelikli varsayilanlardan ilkini don
+        for pref in pref_list:
+            if pref not in bl and pref != model:
+                return pref
+
+        return ""
 
     async def heal(self, provider: str, model: str, error: str = "") -> str:
-        """Istenen 'kendi kendini iyilestirme': model adi gecersizse
-        saglayicinin listesini TAZE cek, dogru adi bul, kara listeye al ve
-        yeni adi dondur. Bulamazsa "" doner (cagri normal sekilde duser)."""
-        self._note("WARN", f"{provider}/{model}: gecersiz model hatasi — "
+        """Istenen 'kendi kendini iyilestirme': model adi gecersizse veya 404 verdiyse
+        saglayicinin listesini TAZE cek, en iyi alternatif modeli bul, kara listeye al,
+        override kaydet ve yeni adi dondur."""
+        prov = (provider or "").lower().strip()
+        self._note("WARN", f"{prov}/{model}: gecersiz model/404 hatasi — "
                            f"liste tazeleniyor. Hata: {str(error)[:160]}")
         try:
-            await self.refresh_provider(provider)
+            await self.refresh_provider(prov)
         except Exception as e:
-            self._note("ERROR", f"{provider}: iyilestirme icin liste cekilemedi: {e}")
+            self._note("ERROR", f"{prov}: iyilestirme icin liste cekilemedi: {e}")
+
+        alt = self.pick_alternative(prov, model)
+        if not alt or alt == model:
             return ""
-        ids = self.ids_for(provider)
-        if ids and model in ids:
-            # Model listede DURUYOR ama cagri "yok" dedi -> sebep model adi
-            # degil (kota/plan/bolge kisiti olabilir). Kara listeye ALMIYORUZ,
-            # yoksa calisan bir modeli kalici olarak kaybederdik.
-            self._note("WARN", f"{provider}/{model}: liste modeli iceriyor ama cagri "
-                               f"reddedildi — model adi sorunu DEGIL "
-                               f"(plan/kota/bolge olabilir). Degisim yapilmadi.")
-            return ""
-        alt = self.pick_alternative(provider, model)
-        if not alt:
-            return ""
-        self.add_blacklist(provider, model,
-                           f"saglayici reddetti: {str(error)[:120]}")
-        self.set_override(provider, model, alt, "gecersiz model adi")
+
+        self.add_blacklist(prov, model, f"saglayici reddetti/404: {str(error)[:120]}")
+        self.set_override(prov, model, alt, "gecersiz model / 404 auto-heal")
+        self.save_cache()
+
+        # config_manager'daki config.json'u dinamik guncelle
+        try:
+            import config_manager
+            cfg = config_manager.load_config()
+            models_cfg = cfg.setdefault("models", {})
+            for layer_name, ldata in models_cfg.items():
+                if isinstance(ldata, dict) and ldata.get("provider") == prov and ldata.get("model") == model:
+                    ldata["model"] = alt
+            config_manager.save_config(cfg)
+        except Exception as ex:
+            print(f"[REGISTRY] config.json guncelleme hatasi: {ex}")
+
+        msg = f"⚠️ Model {model} removed. Auto-switched to Model {alt}."
+        print(f"[ROUTER] {msg}")
+        try:
+            from config_manager import append_action_log
+            append_action_log("auto_heal", f"{prov}: {msg}")
+        except Exception:
+            pass
+
         return alt
 
     # ── zamanlayici ──────────────────────────────────────────────────
     async def scheduler(self, interval_s: float = REFRESH_INTERVAL_S,
-                        first_delay_s: float = 5.0):
+                        first_delay_s: float = 1.0):
         """30 dakikada bir yenile. ANA DONGUYU BLOKLAMAZ: tamami async,
         httpx.AsyncClient kullanir ve tek gorev icinde uyur.
 
-        Acilista 5 saniye bekler — uvicorn ilk istekleri islerken alti tane
-        HTTP cagrisi baslatmak ilk yanit suresini uzatiyordu.
+        Acilista 1 saniye bekler ve canli modelleri hemen cekip dogrular.
         """
         try:
             await asyncio.sleep(max(0.0, first_delay_s))
             while True:
                 try:
                     await self.refresh_all_providers()
+                    try:
+                        import auto_model_discovery
+                        if auto_model_discovery is not None:
+                            auto_model_discovery._reconcile()
+                    except Exception:
+                        pass
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:

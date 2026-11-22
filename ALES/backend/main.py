@@ -5277,6 +5277,39 @@ async def model_discovery_refresh():
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
+@app.post("/api/models/refresh")
+@app.get("/api/models/refresh")
+async def api_models_refresh():
+    """Manuel ve UI tetiklemeli model kesfi ve otomatik onarim."""
+    try:
+        res = {}
+        if auto_model_discovery is not None:
+            res = await auto_model_discovery.run_discovery_now()
+        elif model_registry is not None:
+            res = await model_registry.refresh_all_providers(force=True)
+        return {"ok": True, "result": res}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/session/sync")
+@app.post("/session/sync")
+async def api_session_sync(data: dict):
+    """Frontend'den gelen API anahtarlarini oturuma senkronize et."""
+    try:
+        keys = data.get("keys") or data
+        import config_manager as cm
+        for k, v in keys.items():
+            if isinstance(v, str) and v.strip():
+                cm.set_key(k, v.strip())
+        mode = data.get("mode")
+        if mode:
+            cm.set_mode(mode)
+        return {"ok": True, "message": "Oturum anahtarları eşitlendi"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.post("/model-discovery/reset")
 async def model_discovery_reset(data: dict = None):
     """Otomatik kararlari geri al. Govde:

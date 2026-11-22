@@ -33,6 +33,7 @@ import sys
 import re
 import json
 import base64
+import asyncio
 import httpx
 from datetime import datetime
 from pathlib import Path
@@ -60,12 +61,22 @@ try:
 except Exception as _e:
     document_generator = None
 
+try:
+    import model_registry
+    import auto_model_discovery
+except Exception as _e:
+    model_registry = None
+    auto_model_discovery = None
+
+# In-memory persistent session key store (cloud ephemeral container memory)
+_SESSION_KEYS: dict[str, str] = {}
+
 # ─── AYARLAR ───────────────────────────────────────────────────────
 ACCESS_KEY = os.environ.get("ALES_ACCESS_KEY", "").strip()
 
 def has_any_api_key() -> bool:
     import config_manager as cm
-    return any(bool(cm.get_key(k) or os.environ.get(env)) for k, env in (
+    return any(bool(_SESSION_KEYS.get(k) or cm.get_key(k) or os.environ.get(env)) for k, env in (
         ("groq_key", "GROQ_API_KEY"),
         ("cerebras_key", "CEREBRAS_API_KEY"),
         ("gemini_key", "GEMINI_API_KEY"),
@@ -77,6 +88,21 @@ def has_any_api_key() -> bool:
 DIST_DIR = Path(__file__).resolve().parent.parent / "dist"  # multi-stage Dockerfile burayi doldurur
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    if model_registry and hasattr(model_registry, "registry"):
+        try:
+            asyncio.create_task(model_registry.registry.scheduler.run())
+            print("[ALES CLOUD] Model registry scheduler devrede.")
+        except Exception as e:
+            print(f"[ALES CLOUD] Model registry scheduler error: {e}")
+    if auto_model_discovery:
+        try:
+            auto_model_discovery.start_discovery_loop()
+            print("[ALES CLOUD] Auto model discovery loop devrede.")
+        except Exception as e:
+            print(f"[ALES CLOUD] Auto model discovery loop error: {e}")
 
 if not ACCESS_KEY:
     print("[ALES CLOUD] UYARI: ALES_ACCESS_KEY set edilmedi - erisim kontrolu KAPALI, "
@@ -169,6 +195,35 @@ async def ws_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+            if data.get("type") == "sync_session":
+                keys = data.get("keys") or {}
+                import config_manager as cm
+                cfg = cm.load_config()
+                env_map = {
+                    "groq_key": "GROQ_API_KEY",
+                    "cerebras_key": "CEREBRAS_API_KEY",
+                    "elevenlabs_key": "ELEVENLABS_API_KEY",
+                    "gemini_key": "GEMINI_API_KEY",
+                    "sambanova_key": "SAMBANOVA_API_KEY",
+                    "openrouter_key": "OPENROUTER_API_KEY",
+                    "nvidia_key": "NVIDIA_API_KEY",
+                }
+                for k, v in keys.items():
+                    if isinstance(v, str) and v.strip():
+                        clean_v = v.strip()
+                        _SESSION_KEYS[k] = clean_v
+                        cfg[k] = clean_v
+                        if k in env_map:
+                            os.environ[env_map[k]] = clean_v
+                cm.save_config(cfg)
+                if data.get("mode"):
+                    try:
+                        cm.set_mode(data["mode"])
+                    except Exception:
+                        pass
+                await websocket.send_json({"type": "session_synced", "ok": True})
+                continue
+
             if data.get("type") != "message":
                 continue
             text = (data.get("content") or "").strip()
@@ -208,15 +263,52 @@ async def status():
     return {
         "status": "online",
         "mode": "cloud",
-        "has_groq": bool(cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
-        "has_cerebras": bool(cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
-        "has_gemini": bool(cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
-        "has_sambanova": bool(cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
-        "has_openrouter": bool(cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
-        "has_nvidia": bool(cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
+        "has_groq": bool(_SESSION_KEYS.get("groq_key") or cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
+        "has_cerebras": bool(_SESSION_KEYS.get("cerebras_key") or cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
+        "has_gemini": bool(_SESSION_KEYS.get("gemini_key") or cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
+        "has_sambanova": bool(_SESSION_KEYS.get("sambanova_key") or cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
+        "has_openrouter": bool(_SESSION_KEYS.get("openrouter_key") or cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
+        "has_nvidia": bool(_SESSION_KEYS.get("nvidia_key") or cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
         "auth_enabled": bool(ACCESS_KEY),
         "time": datetime.now().isoformat(),
     }
+
+# ─── HTTP: SESSION SYNC (Cloud/Mobil için Anahtar ve Mod Kalıcılığı) ────
+@app.post("/api/session/sync")
+@app.post("/session/sync")
+async def api_session_sync(data: dict):
+    """Frontend localStorage'dan gelen anahtarları ve modu oturum belleğine al."""
+    global _SESSION_KEYS
+    try:
+        keys = data.get("keys") or data
+        import config_manager as cm
+        cfg = cm.load_config()
+        env_map = {
+            "groq_key": "GROQ_API_KEY",
+            "cerebras_key": "CEREBRAS_API_KEY",
+            "elevenlabs_key": "ELEVENLABS_API_KEY",
+            "gemini_key": "GEMINI_API_KEY",
+            "sambanova_key": "SAMBANOVA_API_KEY",
+            "openrouter_key": "OPENROUTER_API_KEY",
+            "nvidia_key": "NVIDIA_API_KEY",
+        }
+        for k, v in keys.items():
+            if isinstance(v, str) and v.strip():
+                clean_v = v.strip()
+                _SESSION_KEYS[k] = clean_v
+                cfg[k] = clean_v
+                if k in env_map:
+                    os.environ[env_map[k]] = clean_v
+        cm.save_config(cfg)
+        mode = data.get("mode")
+        if mode:
+            try:
+                cm.set_mode(mode)
+            except Exception:
+                pass
+        return {"ok": True, "message": "Oturum senkronize edildi", "keys_received": list(keys.keys())}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 # ─── HTTP: KONFİGÜRASYON (GET /config & POST /config) ─────────────
 @app.get("/config")
@@ -227,13 +319,13 @@ async def get_config(x_ales_key: str = Header(default="")):
     cfg = cm.load_config()
     mode_cfg = cm.get_mode_config()
     return {
-        "has_groq": bool(cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
-        "has_cerebras": bool(cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
-        "has_elevenlabs": bool(cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY")),
-        "has_gemini": bool(cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
-        "has_sambanova": bool(cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
-        "has_openrouter": bool(cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
-        "has_nvidia": bool(cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
+        "has_groq": bool(_SESSION_KEYS.get("groq_key") or cm.get_key("groq_key") or os.environ.get("GROQ_API_KEY")),
+        "has_cerebras": bool(_SESSION_KEYS.get("cerebras_key") or cm.get_key("cerebras_key") or os.environ.get("CEREBRAS_API_KEY")),
+        "has_elevenlabs": bool(_SESSION_KEYS.get("elevenlabs_key") or cm.get_key("elevenlabs_key") or os.environ.get("ELEVENLABS_API_KEY")),
+        "has_gemini": bool(_SESSION_KEYS.get("gemini_key") or cm.get_key("gemini_key") or os.environ.get("GEMINI_API_KEY")),
+        "has_sambanova": bool(_SESSION_KEYS.get("sambanova_key") or cm.get_key("sambanova_key") or os.environ.get("SAMBANOVA_API_KEY")),
+        "has_openrouter": bool(_SESSION_KEYS.get("openrouter_key") or cm.get_key("openrouter_key") or os.environ.get("OPENROUTER_API_KEY")),
+        "has_nvidia": bool(_SESSION_KEYS.get("nvidia_key") or cm.get_key("nvidia_key") or os.environ.get("NVIDIA_API_KEY")),
         "elevenlabs_voice": cfg.get("elevenlabs_voice") or "eleven_monolingual_v1",
         "edge_voice": cfg.get("edge_voice") or "tr-TR-AhmetNeural",
         "mode": cm.get_mode(),
@@ -264,10 +356,12 @@ async def set_config(data: dict, x_ales_key: str = Header(default="")):
             val = data[key]
             if val is not None and str(val).strip() != "":
                 clean_val = str(val).strip()
+                _SESSION_KEYS[key] = clean_val
                 cfg[key] = clean_val
                 if key in env_map:
                     os.environ[env_map[key]] = clean_val
             elif data.get(f"clear_{key}") is True or val == "__CLEAR__":
+                _SESSION_KEYS.pop(key, None)
                 cfg[key] = ""
                 if key in env_map and env_map[key] in os.environ:
                     del os.environ[env_map[key]]
@@ -288,6 +382,21 @@ async def set_config(data: dict, x_ales_key: str = Header(default="")):
             return {"success": True, "mode_error": str(e)}
             
     return {"success": True}
+
+@app.post("/api/models/refresh")
+@app.get("/api/models/refresh")
+@app.post("/model-discovery/refresh")
+async def api_models_refresh():
+    """Manuel ve UI tetiklemeli model keşfi ve otomatik onarım."""
+    try:
+        res = {}
+        if auto_model_discovery is not None:
+            res = await auto_model_discovery.run_discovery_now()
+        elif model_registry is not None:
+            res = await model_registry.refresh_all_providers(force=True)
+        return {"ok": True, "result": res}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 # ─── HTTP: MOD SİSTEMİ (GET /modes & POST /mode) ─────────────────
 @app.get("/modes")
