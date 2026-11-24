@@ -13,17 +13,19 @@ Bu, isair/jarvis ve benzeri projelerin kullandigi "tool routing"
 teknigi - kucuk/ucretsiz modellerle buyuk fark yaratir.
 """
 
-# Her zaman gonderilen cekirdek araclar (en sik kullanilanlar)
+# 5 ÇEKİRDEK PRİMİTİF (Claude Code Primitives - Attention Dilution Önleyici)
 CORE_TOOLS = {
-    "remember_fact", "search_memory", "get_user_profile",
-    "add_pending_approval", "get_system_info", "generate_pdf",
-    "read_file", "write_file", "run_terminal_command",
+    "read_file",
+    "write_file",
+    "run_terminal_command",
+    "google_search",
+    "generate_pdf",
 }
 
-# Bu kategoriler HER ZAMAN aktif - ALES'in "Claude gibi" temel
-# yetenekleri. Kisitlanirsa model elinde arac olmadigi icin
-# "yapamiyorum" der.
-ALWAYS_INCLUDE_CATEGORIES = ["pc_control", "filesystem", "document", "web", "code", "terminal", "worldview", "memory"]
+# Varsayılan olarak HER ZAMAN açık kategoriler BOŞTUR.
+# Sadece kullanıcının mesajında açık bir istek varsa (ekran, hava, kripto, fiverr vb.)
+# o kategorideki dinamik araçlar eklenir. Böylece model sadece 5 araçla çalışır!
+ALWAYS_INCLUDE_CATEGORIES = []
 
 # Kategori -> anahtar kelimeler -> arac isimleri
 TOOL_CATEGORIES = {
@@ -55,9 +57,8 @@ TOOL_CATEGORIES = {
                   "get_news_tr"]
     },
     "worldview": {
-        "keywords": ["gundem", "gündem", "dunya", "dünya", "hava", "doviz", "döviz",
-                      "kripto", "bitcoin", "ethereum", "kur", "bugün", "bugun", "ne var",
-                      "ne oldu", "haberler"],
+        "keywords": ["gundem", "gündem", "dunya", "dünya", "hava durumu", "doviz", "döviz",
+                      "kripto", "bitcoin", "ethereum", "döviz kuru", "haberler", "piyasa"],
         "tools": ["get_worldview", "get_weather", "get_crypto_prices",
                   "get_exchange_rates", "get_news_tr"]
     },
@@ -169,14 +170,25 @@ def select_relevant_tools(user_message: str, all_tools: list) -> list:
             selected_names.update(cat["tools"])
             matched_categories.append(cat_name)
 
-    # Filtrele
-    filtered = [t for t in all_tools if t["function"]["name"] in selected_names]
+    # Filtrele ve tekilleştir
+    seen = set()
+    filtered = []
+    for t in all_tools:
+        name = t.get("function", {}).get("name")
+        if name in selected_names and name not in seen:
+            seen.add(name)
+            filtered.append(t)
 
-    # Guvenlik: hicbir sey secilmediyse hepsini don (asla bos kalma)
+    # Guvenlik: hicbir sey secilmediyse CEKIRDEK ARACLARI don (69 araci ASLA boca etme)
     if not filtered:
-        return all_tools
+        seen = set()
+        for t in all_tools:
+            name = t.get("function", {}).get("name")
+            if name in CORE_TOOLS and name not in seen:
+                seen.add(name)
+                filtered.append(t)
 
-    return filtered
+    return filtered if filtered else all_tools
 
 def get_routing_info(user_message: str) -> str:
     """Debug/log icin - hangi opsiyonel kategoriler tetiklendi"""

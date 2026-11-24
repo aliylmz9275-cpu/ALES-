@@ -107,6 +107,8 @@ hiddenimports += [
     "uvicorn.protocols.websockets", "uvicorn.protocols.websockets.auto",
     "uvicorn.protocols.websockets.websockets_impl",
     "uvicorn.lifespan", "uvicorn.lifespan.on", "uvicorn.lifespan.off",
+    "routers", "routers.profiles", "routers.terminal", "routers.tools", "routers.chat",
+    "chromadb",
 ]
 
 # backend/*.py TAMAMI -- elle liste TUTMUYORUZ.

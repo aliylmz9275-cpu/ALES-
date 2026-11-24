@@ -95,3 +95,5 @@ markdown>=3.0.0
 # ALES'i CALISTIRMAK icin gerekmez; .exe'yi yeniden derlemek icin gerekir.
 # Derleme: proje kokunde "build_exe.bat" (veya "pyinstaller ALES.spec").
 pyinstaller==6.20.0
+
+chromadb>=1.5.0

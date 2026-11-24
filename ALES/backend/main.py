@@ -338,6 +338,13 @@ from config_manager import (get_mode, set_mode, list_modes, get_mode_config,
 app = FastAPI(title="ALES", version="3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# ─── MODÜLER FASTAPI ROUTER'LARI (Week 1 Architecture Refactoring) ───
+from routers import profiles, terminal, tools, chat
+app.include_router(profiles.router)
+app.include_router(terminal.router)
+app.include_router(tools.router)
+app.include_router(chat.router)
+
 # ─── CLIENT ─────────────────────────────────────────────────────
 def get_client():
     cfg = load_config()
@@ -662,6 +669,13 @@ def _nd(fn_name: str, *a, **kw) -> str:
 
 # ─── TOOLS ───────────────────────────────────────────────────────
 TOOLS = [
+    # ── 5 ÇEKİRDEK PRİMİTİF (Claude Code Standardı) ──
+    {"type":"function","function":{"name":"read_file","description":"Belirtilen dosyanın içeriğini okur. Kod veya dosya incelemek için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Okunacak dosya yolu"}},"required":["path"]}}},
+    {"type":"function","function":{"name":"write_file","description":"Belirtilen dosyayı oluşturur veya günceller. Kod yazmak veya dosya üretmek için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Yazılacak dosya yolu"},"content":{"type":"string","description":"Dosyaya yazılacak tam içerik"},"overwrite":{"type":"boolean","description":"Var olan dosyanın üzerine yazılsın mı"}},"required":["path","content"]}}},
+    {"type":"function","function":{"name":"run_terminal_command","description":"Terminalde / komut satırında doğrudan komut çalıştırır (git, npm, pip, python, pytest, dir vb.). Bir hata çözdüğünde veya kod yazdıktan sonra test edip doğrulamak için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"},"timeout":{"type":"integer","description":"Zaman aşımı süresi (saniye, varsayılan: 45)"}},"required":["cmd"]}}},
+    {"type":"function","function":{"name":"run_terminal","description":"run_terminal_command için kısa yol takma adı. Terminalde komut çalıştırır.","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"}},"required":["cmd"]}}},
+    {"type":"function","function":{"name":"search_web","description":"İnternette güncel bilgi, dokümantasyon veya araştırma yapar.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Arama sorgusu"}},"required":["query"]}}},
+    {"type":"function","function":{"name":"generate_pdf","description":"Creates a PDF file from text or markdown. If the user asks for a PDF, document, or report, YOU MUST use this tool immediately. (Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'pdf yap', 'pdf oluştur', 'rapor hazırla', 'belge ver' dediğinde MUTLAKA bu aracı çağır).","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge veya rapor başlığı"},"content":{"type":"string","description":"Markdown formatında belge veya rapor içeriği"}},"required":["title","content"]}}},
     # PC
     {"type":"function","function":{"name":"take_screenshot","description":"Ekranın görüntüsünü al","parameters":{"type":"object","properties":{"region":{"type":"string","enum":["auto","active_window","full_screen"],"description":"auto=aktif pencere (hızlı, varsayılan), full_screen=tüm ekran/monitörler"}},"required":[]}}},
     {"type":"function","function":{"name":"open_app","description":"Uygulama aç: chrome/firefox/notepad/spotify/fiverr/upwork/bionluk/cmd","parameters":{"type":"object","properties":{"app_name":{"type":"string"}},"required":["app_name"]}}},
@@ -1196,6 +1210,8 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "generate_pdf": lambda: json.dumps(document_generator.generate_pdf(args.get("title", "Belge"), args.get("content", "")) if document_generator else {"ok": False, "error": "PDF modülü aktif değil"}, ensure_ascii=False),
             # Claude Code Terminal / Shell Komutu
             "run_terminal_command": lambda: run_terminal_command(args.get("cmd") or args.get("command", ""), int(args.get("timeout") or 45)),
+            "run_terminal": lambda: run_terminal_command(args.get("cmd") or args.get("command", ""), int(args.get("timeout") or 45)),
+            "search_web": lambda: google_search(args.get("query") or args.get("q", "")),
         }
         if name in tools:
             return tools[name]()
@@ -1727,60 +1743,20 @@ async def _send_tts_stream(text: str, websocket: WebSocket) -> bool:
         print(f"[TTS] akis basarisiz ({res['error']}) — tek parca yola dusuldu")
     return False
 
-# ─── SYSTEM PROMPT ───────────────────────────────────────────────
-BASE_SYSTEM = """Sen ALES - Advanced Logic Execution System v3.0.
-Kullanıcın Ali. Onun kişisel AI asistanı, stratejik düşünce ortağı ve güvendiği zeki sistemisin.
+# ─── SYSTEM PROMPT (CRISP & AGENTIC - CLAUDE CODE STANDARD) ───
+BASE_SYSTEM = """You are ALES, a senior AI software engineer and autonomous operating system agent.
+Kullanıcın Ali.
 
-MOD: {persona_tone}
-
-GENEL ASİSTAN VE DÜŞÜNCE ORTAĞI (TEMEL İLKE):
-- Sen çok yönlü, derin genel kültüre ve analitik yetkinliğe sahip genel bir yapay zeka asistanısın.
-- Bilim, felsefe, havacılık, tarih, sosyoloji, sanat veya gündelik konular dahil her soruya doğal, akıcı, kapsamlı ve samimi bir dille doğrudan yanıt ver.
-- Kullanıcı açıkça istemediği veya ilgili bir görev vermediği sürece konuşmayı ASLA kodlamaya, web kazımaya (scraping), görev otomasyonuna veya bot işlevlerine ZORLAMA. Bir düşünce ortağı gibi sohbet et ve akıl yürüt.
-
-ÇEKİRDEK KURALLAR (PAZARLIK YOK):
-1. UYDURMA YOK: Emin olmadığın hiçbir şeyi kesin söyleme. Doğrulamadıysan açıkça belirt veya "VARSAYIM:" etiketi kullan.
-2. AGGRESSIVE TOOL EXECUTION & CODING AGENT (CLAUDE CODE PROTOCOL):
-NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool.
-You are a Senior Software Engineer. When asked to code or fix something, DO NOT explain. Read the file (`read_file`), write the new code (`write_file` / `edit_file`), and run the command to test it (`run_terminal_command`). Act like a terminal agent.
-If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.
-Kullanıcının isteği bir araç, dosya oluşturma, kod çalıştırma, sistem kontrolü, canlı arama veya PDF üretimi gerektiriyorsa, ASLA nasıl yapılacağını anlatma; ARACI ÇAĞIRIP HEMEN YAP!
-3. İÇ DÜŞÜNCEYİ GÖSTERME: Kullanıcıya sadece doğrudan yanıtı, net gerekçeyi ve gerekliyse uygulanabilir adımları ver. Planını uzun uzun yazma.
-4. NETLİK VE DERİNLİK: "Direkt yap" dendiğinde soru sorma, en mantıklı adımla ilerle. Analiz veya bilgi istendiğinde doyurucu ve derinlikli açıkla.
-
-HIZ KURALLARI:
-- Tek adımda halledilebilecek şeylerde fazladan araç kullanma.
-- "Yapıyorum..." gibi boş dolgu cümleleri yazma, doğrudan konuya gir.
-- Kullanıcı bilgi soruyorsa doğrudan açıkla; araç çağrısı gerekiyorsa anında icra et.
-
-HAFIZA (PROAKTİF OL):
-- Ali bir tercih, hedef, ilgi alanı veya çalışma tarzı belirtirse update_user_profile ile kaydet.
-- Önemli ve kalıcı bilgiler için remember_fact kullan.
-- ASLA kaydetme: şifre, API anahtarı, mahrem/özel bilgi.
-
-DOSYA VE SİSTEM İŞLEMLERİ:
-- Dosya okuma -> read_file
-- Dosya oluşturma -> write_file
-- Dosya düzenleme -> edit_file
-- Terminal / Komut çalıştırma -> run_terminal_command
-- Kritik işlemler (silme, harici onay gerektirenler) -> add_pending_approval
-
-BELGE VE PDF ÜRETİMİ:
-- NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or code tutorials.
-- If the user asks for a PDF, report, or document, YOU MUST use the `generate_pdf` tool.
-- Kullanıcı bir PDF, rapor, özet veya doküman dosyası oluşturulmasını istediğinde doğrudan metinle veya kod anlatımıyla geçiştirmek KESİNLİKLE YASAKTIR; MUTLAKA `generate_pdf` aracını çağır ve üretilen dosya indirme bağlantısını kullanıcıya sun.
-
-EKRAN GÖRME (HIZ):
-- analyze_screen / take_screenshot ekranı görmen gerektiğinde kullanılır.
-- "Ekranda ne yazıyor" gibi durumlarda yerel OCR veya görme modelinden faydalanılır.
-
-SKILLS & CONNECTORS:
-- ALES modüler beceri ve bağlantılara sahiptir. İhtiyaç olduğunda ilgili araçları kullan.
-
-KAYNAK DİSİPLİNİ:
-- Web araması yaptıysan cevabın sonuna kısa kaynak notu ekle.
-
-{persona_extra}
+CRITICAL DIRECTIVES:
+1. EXECUTE, DO NOT EXPLAIN: If you have a tool for a task, NEVER explain how to do it in code. YOU MUST call the tool immediately. Do not write tutorial code.
+2. 5 CORE PRIMITIVES:
+   - `read_file(path)`: Inspect file contents.
+   - `write_file(path, content)`: Create or write code/files directly.
+   - `run_terminal_command(cmd)`: Execute shell commands, tests, git, pip, npm. If an error occurs, analyze stderr, edit the code, and re-run.
+   - `search_web(query)`: Search internet for up-to-date documentation and facts.
+   - `generate_pdf(title, content)`: If the user asks for a PDF, document, or report, YOU MUST CALL THIS TOOL IMMEDIATELY! Do not output tutorial code.
+3. CODING AGENT WORKFLOW:
+   Read -> Edit -> Run Test -> Verify. Be concise, direct, and pragmatic.
 
 Şimdi: {dt}
 Ali profili: {profile}
@@ -2227,80 +2203,21 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
         dt=datetime.now().strftime("%d.%m.%Y %H:%M"),
         profile=build_context_prompt() or "Henüz profil yok.",
         persona_tone=persona["tone"],
-        persona_extra=persona.get("system_add",""),
-        recent_context=build_recent_context(conv_id)
+        persona_extra="",
+        recent_context=""
     )
-    # KALICI SISTEM PROMPTU (LUBV) — system_prompts.json'da enabled ise her
-    # konusmaya sistem rolunun BASINA eklenir. Bos/dormant ise (varsayilan)
-    # tam no-op — hicbir sey degismez.
     lubv = get_system_prompt()
     if lubv:
         system = lubv + "\n\n" + system
 
-    # UZUN VADELI HAFIZA: konuya anlamsal olarak yakin kalici notlari sistem
-    # promptuna ekle. build_recent_context() sadece SON mesajlari verir; bu ise
-    # haftalar oncesinden ilgili olani getirir. Toplu kuyruk uzerinden gider.
-    _lt = await recall_long_term(user_message, k=3)
-    if _lt:
-        system += "\n\n[UZUN VADELI HAFIZA — gecmis oturumlardan ilgili notlar]\n" + \
-            "\n".join(f"- {r.get('text','')}" for r in _lt if r.get("text"))
-
-    # ── ÖĞRENİLEN DENEYİM KURALLARI (experience_learner) ───────────
+    # ── GERÇEK VEKTÖR RAG (ChromaDB — Yalnızca en alakalı 3 kısa anı) ──
     try:
-        import experience_learner
-        _lr = experience_learner.get_rules_prompt()
-        if _lr:
-            system += "\n" + _lr
+        import long_term_memory
+        _lt = long_term_memory.recall(user_message, k=3)
+        if _lt:
+            system += "\n\n[İLGİLİ BELLEK]:\n" + "\n".join(f"- {r.get('text','')}" for r in _lt if r.get("text"))
     except Exception:
         pass
-
-    # ── FAZ-3: BAGLAMSAL DENEYIM TEKRARI (CER) ──────────────────────
-    # "Contextual Experience Replay" (2026): egitim GEREKTIRMEYEN
-    # oz-gelisim. ALES gecmiste BENZER bir gorevi nasil cozdugunu (ya da
-    # nerede patladigini) kendi baglam penceresinde tekrar okur. Uzun
-    # vadeli hafizadan FARKI: LTM "ne konustuk"u getirir, CER "bu isi
-    # hangi ADIMLARLA yaptik"i getirir.
-    if cer_module is not None and _mod_on("cer", cer_module):
-        try:
-            _cer_inj = cer_module.format_cer_prompt_injection(user_message)
-            if _cer_inj:
-                system += "\n\n" + _cer_inj
-                print("[CER] gecmis yorunge baglama enjekte edildi")
-        except Exception as e:
-            print(f"[CER] enjeksiyon atlandi: {e}")
-
-    # ── FAZ-3: MUSE HIYERARSIK BELLEK ───────────────────────────────
-    # "Learning on the Job" (2025): basarili turlardan damitilmis
-    # STRATEJIK ilkeler (prosedurel tarifler degil — onlar Fast Path /
-    # skills_autogrowth tarafinda). Sadece kural VARSA eklenir.
-    if _mod_on("self_evolution", self_evolution):
-        try:
-            _muse = self_evolution.get_muse_context(user_message)
-            if _muse:
-                system += "\n" + _muse
-        except Exception as e:
-            print(f"[MUSE] baglam atlandi: {e}")
-
-    # ── FAZ-6: DARWIN GODEL AKTIF ISKELE (A/B denemesi) ─────────────
-    # Aktif iskelenin strateji METNI promptun sonuna eklenir ve KIMLIGI
-    # saklanir; tur bitince sonuc TAM O kimlige yazilir (bkz.
-    # _record_turn_evolution). Sampiyon <-> aday paylasimi modulun
-    # icinde (CHALLENGER_SHARE) yapilir, boylece iki taraf ayni kosullarda
-    # olculur.
-    #
-    # NOT: strateji metni yalnizca DAVRANIS TAVSIYESIDIR ("tiklamadan once
-    # pencere odagini dogrula" gibi) — arac izni vermez, kapi kaldirmaz,
-    # kod calistirmaz. Panelden gorulebilir ve kapatilabilir.
-    _scaffold_id = None
-    if mode_cfg.get("self_evolution", True) and _mod_on("darwin_godel", darwin_godel):
-        try:
-            _sc = darwin_godel.get_active_strategy()
-            if _sc.get("strategy"):
-                _scaffold_id = _sc.get("id")
-                system += (f"\n\n[EVRIMSEL ISKELE — {_sc.get('name','')} "
-                           f"({_sc.get('role')})]\n{_sc['strategy']}")
-        except Exception as e:
-            print(f"[DGM] iskele secilemedi: {e}")
 
     # ── AGGRESSIVE TOOL EXECUTION DIRECTIVE (Claude Protocol) ────────
     _msg_l = (user_message or "").lower()
