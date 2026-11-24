@@ -288,6 +288,47 @@ try:
 except Exception as _e:
     document_generator = None
     print(f"[ALES] document_generator yuklenemedi: {_e}")
+try:
+    import profile_manager
+except Exception as _e:
+    profile_manager = None
+    print(f"[ALES] profile_manager yuklenemedi: {_e}")
+try:
+    import plan_manager
+except Exception as _e:
+    plan_manager = None
+    print(f"[ALES] plan_manager yuklenemedi: {_e}")
+
+def run_terminal_command(cmd: str, timeout: int = 45) -> str:
+    """Komut satırında (terminal/shell) komut çalıştırır ve çıktısını (stdout/stderr) döner."""
+    if not cmd or not str(cmd).strip():
+        return "❌ Komut boş olamaz."
+    cmd_str = str(cmd).strip()
+    try:
+        import subprocess
+        root_dir = Path(__file__).resolve().parent.parent
+        res = subprocess.run(
+            cmd_str,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(root_dir)
+        )
+        out = (res.stdout or "").strip()
+        err = (res.stderr or "").strip()
+        lines = [f"[Exit Code: {res.returncode}]"]
+        if out:
+            lines.append(f"STDOUT:\n{out}")
+        if err:
+            lines.append(f"STDERR:\n{err}")
+        if not out and not err:
+            lines.append("(Komut çıktı vermeden başarıyla tamamlandı)")
+        return "\n\n".join(lines)
+    except subprocess.TimeoutExpired:
+        return f"⏱️ Komut zaman aşımına uğradı ({timeout}s)."
+    except Exception as e:
+        return f"❌ Terminal çalıştırma hatası: {str(e)}"
 
 from config_manager import (get_mode, set_mode, list_modes, get_mode_config,
                             get_system_prompt, get_key, get_council, set_council,
@@ -724,6 +765,8 @@ TOOLS = [
     {"type":"function","function":{"name":"openclaw_terminal","description":"Kabuk (shell) komutu calistir ve cikti/hata kodunu getir - orn 'git status', 'dir', 'npm run build'. OpenClaw daemon varsa orada, yoksa yerel subprocess'te calisir. Uzun surecek komutlar icin timeout_s ver.","parameters":{"type":"object","properties":{"command":{"type":"string"},"timeout_s":{"type":"number","description":"Varsayilan 15, en fazla 120"}},"required":["command"]}}},
     # ── Belge ve PDF Üretimi ──
     {"type":"function","function":{"name":"generate_pdf","description":"Creates a PDF file from text or markdown. If the user asks for a PDF, document, or report, YOU MUST use this tool. (Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'pdf yap', 'pdf oluştur', 'rapor hazırla', 'belge ver' dediğinde MUTLAKA bu aracı çağır).","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge veya rapor başlığı"},"content":{"type":"string","description":"Markdown formatında belge veya rapor içeriği"}},"required":["title","content"]}}},
+    # ── Claude Code Terminal / Shell Aracı ──
+    {"type":"function","function":{"name":"run_terminal_command","description":"Terminalde / komut satırında doğrudan komut çalıştırır (git, npm, pip, python, pytest, dir vb.). Bir hata çözdüğünde veya kod yazdıktan sonra test edip doğrulamak için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"},"timeout":{"type":"integer","description":"Zaman aşımı süresi (saniye, varsayılan: 45)"}},"required":["cmd"]}}},
 ]
 
 # ─── ACIL DURUM ARAC SETI ────────────────────────────────────────
@@ -1151,6 +1194,8 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "mcp_list_directory": lambda: mcp_connector.mcp_list_directory(args.get("path", ".")) if mcp_connector else list_directory(args.get("path", ".")),
             # PDF ve Belge Üretimi
             "generate_pdf": lambda: json.dumps(document_generator.generate_pdf(args.get("title", "Belge"), args.get("content", "")) if document_generator else {"ok": False, "error": "PDF modülü aktif değil"}, ensure_ascii=False),
+            # Claude Code Terminal / Shell Komutu
+            "run_terminal_command": lambda: run_terminal_command(args.get("cmd") or args.get("command", ""), int(args.get("timeout") or 45)),
         }
         if name in tools:
             return tools[name]()
@@ -1695,8 +1740,10 @@ GENEL ASİSTAN VE DÜŞÜNCE ORTAĞI (TEMEL İLKE):
 
 ÇEKİRDEK KURALLAR (PAZARLIK YOK):
 1. UYDURMA YOK: Emin olmadığın hiçbir şeyi kesin söyleme. Doğrulamadıysan açıkça belirt veya "VARSAYIM:" etiketi kullan.
-2. AGGRESSIVE TOOL EXECUTION (CLAUDE CODE PROTOCOL - NO EXPLANATIONS):
-NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool. If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.
+2. AGGRESSIVE TOOL EXECUTION & CODING AGENT (CLAUDE CODE PROTOCOL):
+NEVER explain how to do a task if you have a tool for it. YOU MUST execute the tool.
+You are a Senior Software Engineer. When asked to code or fix something, DO NOT explain. Read the file (`read_file`), write the new code (`write_file` / `edit_file`), and run the command to test it (`run_terminal_command`). Act like a terminal agent.
+If the user asks for a PDF, CALL the `generate_pdf` tool immediately. Do not give them instructions or tutorial code.
 Kullanıcının isteği bir araç, dosya oluşturma, kod çalıştırma, sistem kontrolü, canlı arama veya PDF üretimi gerektiriyorsa, ASLA nasıl yapılacağını anlatma; ARACI ÇAĞIRIP HEMEN YAP!
 3. İÇ DÜŞÜNCEYİ GÖSTERME: Kullanıcıya sadece doğrudan yanıtı, net gerekçeyi ve gerekliyse uygulanabilir adımları ver. Planını uzun uzun yazma.
 4. NETLİK VE DERİNLİK: "Direkt yap" dendiğinde soru sorma, en mantıklı adımla ilerle. Analiz veya bilgi istendiğinde doyurucu ve derinlikli açıkla.
@@ -1715,6 +1762,7 @@ DOSYA VE SİSTEM İŞLEMLERİ:
 - Dosya okuma -> read_file
 - Dosya oluşturma -> write_file
 - Dosya düzenleme -> edit_file
+- Terminal / Komut çalıştırma -> run_terminal_command
 - Kritik işlemler (silme, harici onay gerektirenler) -> add_pending_approval
 
 BELGE VE PDF ÜRETİMİ:
@@ -4241,6 +4289,182 @@ async def openclaw_terminal_api(payload: dict):
     cmd = payload.get("command", "dir")
     timeout_s = float(payload.get("timeout_s", 15.0))
     return await openclaw_bridge.bridge.execute_terminal(cmd, timeout_s=timeout_s)
+
+# ─── PROFİL & KALICI API ANAHTARI YÖNETİMİ (SQLite) ───────────────
+@app.post("/api/profile/save")
+async def profile_save_api(data: dict):
+    if not profile_manager:
+        return {"ok": False, "error": "profile_manager modülü aktif değil"}
+    try:
+        code = (data.get("access_code") or "").strip()
+        name = (data.get("name") or "").strip()
+        keys = data.get("keys") or data
+        res = profile_manager.save_profile(code, name, keys)
+        if res.get("ok"):
+            cfg = load_config()
+            env_map = {
+                "groq_key": "GROQ_API_KEY",
+                "cerebras_key": "CEREBRAS_API_KEY",
+                "openai_key": "OPENAI_API_KEY",
+                "elevenlabs_key": "ELEVENLABS_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "sambanova_key": "SAMBANOVA_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "nvidia_key": "NVIDIA_API_KEY",
+            }
+            for k, env in env_map.items():
+                val = keys.get(k) or keys.get(k.replace("_key", ""))
+                if val and str(val).strip():
+                    clean_val = str(val).strip()
+                    cfg[k] = clean_val
+                    os.environ[env] = clean_val
+            save_config(cfg)
+        return res
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/profile/load")
+@app.get("/api/profile/load")
+async def profile_load_api(request: Request):
+    if not profile_manager:
+        return {"ok": False, "error": "profile_manager modülü aktif değil"}
+    try:
+        code = ""
+        if request.method == "POST":
+            body = await request.json()
+            code = (body.get("access_code") or "").strip()
+        else:
+            code = (request.query_params.get("access_code") or "").strip()
+        
+        res = profile_manager.load_profile(code)
+        if res.get("ok") and res.get("keys"):
+            cfg = load_config()
+            env_map = {
+                "groq_key": "GROQ_API_KEY",
+                "cerebras_key": "CEREBRAS_API_KEY",
+                "openai_key": "OPENAI_API_KEY",
+                "elevenlabs_key": "ELEVENLABS_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "sambanova_key": "SAMBANOVA_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "nvidia_key": "NVIDIA_API_KEY",
+            }
+            for k, val in res["keys"].items():
+                if val:
+                    cfg[k] = val
+                    if k in env_map:
+                        os.environ[env_map[k]] = val
+            save_config(cfg)
+        return res
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/profiles")
+async def profiles_list_api():
+    if not profile_manager:
+        return {"ok": False, "profiles": []}
+    try:
+        return {"ok": True, "profiles": profile_manager.list_profiles()}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "profiles": []}
+
+# ─── GÖREV VE EYLEM PLANLAMA MOTORU (Plan Manager) ───────────────
+@app.post("/api/plan/create")
+async def plan_create_api(data: dict):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager modülü aktif değil"}
+    goal = (data.get("goal") or "").strip()
+    if not goal:
+        return {"ok": False, "error": "Hedef belirtilmelidir."}
+    try:
+        async def _llm_caller(prompt, system):
+            try:
+                if hasattr(multi_agent, "_call_groq"):
+                    ok, text = await multi_agent._call_groq(prompt, system)
+                    if ok:
+                        return ok, text
+            except Exception:
+                pass
+            try:
+                if hasattr(multi_agent, "_call_gemini"):
+                    return await multi_agent._call_gemini(prompt, system)
+            except Exception:
+                pass
+            return False, ""
+
+        plan = await plan_manager.generate_plan_with_llm(goal, _llm_caller)
+        return {"ok": True, "plan": plan}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/plan/execute")
+async def plan_execute_api(data: dict):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager modülü aktif değil"}
+    plan_id = (data.get("plan_id") or "").strip()
+    if not plan_id:
+        return {"ok": False, "error": "plan_id gereklidir."}
+    try:
+        async def _exec_tool(tool_name, args):
+            return execute_tool(tool_name, args)
+
+        res = await plan_manager.execute_plan(plan_id, _exec_tool)
+        return {"ok": True, "plan": res}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/plans")
+async def plans_list_api():
+    if not plan_manager:
+        return {"ok": False, "plans": []}
+    return {"ok": True, "plans": plan_manager.list_plans()}
+
+@app.get("/api/plan/{plan_id}")
+async def plan_get_api(plan_id: str):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager aktif değil"}
+    p = plan_manager.get_plan(plan_id)
+    if not p:
+        return {"ok": False, "error": "Plan bulunamadı"}
+    return {"ok": True, "plan": p}
+
+@app.delete("/api/plan/{plan_id}")
+async def plan_delete_api(plan_id: str):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager aktif değil"}
+    ok = plan_manager.delete_plan(plan_id)
+    return {"ok": ok}
+
+# ─── KODLAMA VE CANLI TERMİNAL ÇALIŞTIRICI (Coding Agent Terminal) ─
+@app.post("/api/terminal/run")
+async def terminal_run_api(data: dict):
+    cmd = (data.get("command") or data.get("cmd") or "").strip()
+    timeout = int(data.get("timeout") or 45)
+    if not cmd:
+        return {"ok": False, "error": "Komut boş olamaz"}
+    try:
+        import subprocess
+        root_dir = Path(__file__).resolve().parent.parent
+        res = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(root_dir)
+        )
+        return {
+            "ok": True,
+            "command": cmd,
+            "exit_code": res.returncode,
+            "stdout": res.stdout or "",
+            "stderr": res.stderr or "",
+            "time": datetime.now().isoformat()
+        }
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "command": cmd, "error": f"Komut zaman aşımına uğradı ({timeout}s)", "exit_code": -1}
+    except Exception as e:
+        return {"ok": False, "command": cmd, "error": str(e), "exit_code": -1}
 
 # 10. EvoCUA / InAgent
 @app.get("/evocua/status")

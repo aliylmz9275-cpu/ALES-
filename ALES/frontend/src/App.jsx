@@ -755,6 +755,22 @@ export default function App() {
 
   useEffect(() => {
     try {
+      const savedCode = localStorage.getItem('ales_access_code') || ''
+      if (savedCode) {
+        authFetch(`${API_URL}/api/profile/load`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_code: savedCode })
+        }).then(r => r.json()).then(d => {
+          if (d.ok && d.keys) {
+            authFetch(`${API_URL}/api/session/sync`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ keys: d.keys })
+            }).catch(() => {})
+          }
+        }).catch(() => {})
+      }
       const savedKeys = JSON.parse(localStorage.getItem('ales_saved_api_keys') || '{}')
       const savedMode = localStorage.getItem('ales_selected_mode') || ''
       if (Object.keys(savedKeys).length > 0 || savedMode) {
@@ -1713,6 +1729,8 @@ export default function App() {
       <div className="app-tabs-bar" style={{display:'flex',alignItems:'center',padding:'0 12px',background:'#121212',borderBottom:'1px solid rgba(255,255,255,0.12)',flexShrink:0,height:40,gap:6,overflowX:'auto',whiteSpace:'nowrap',maxWidth:'100vw'}}>
         {[
           {id:'chat',label:'SOHBET'},
+          {id:'terminal',label:'TERMİNAL'},
+          {id:'plans',label:'PLANLAR'},
           {id:'history',label:'GEÇMİŞ'},
           {id:'log',label:'LOG'},
           {id:'worldview',label:'DÜNYA'},
@@ -1800,6 +1818,9 @@ export default function App() {
           </div>}
           <div ref={bottomRef} />
         </div>}
+
+        {tab==='terminal' && <TerminalPanel />}
+        {tab==='plans' && <PlansPanel />}
 
         {tab==='history' && <div style={{height:'100%',overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:8}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -3151,6 +3172,560 @@ function MetricsPanel() {
   )
 }
 
+function TerminalPanel() {
+  const [cmd, setCmd] = useState('')
+  const [history, setHistory] = useState([
+    {
+      id: 'welcome',
+      command: 'echo "ALES Coding Agent Terminal v1.0.0 Ready"',
+      stdout: 'ALES Coding Agent Terminal v1.0.0 Ready\nType any command below or use quick action shortcuts.',
+      stderr: '',
+      exit_code: 0,
+      timestamp: new Date().toLocaleTimeString()
+    }
+  ])
+  const [loading, setLoading] = useState(false)
+  const [cmdHistory, setCmdHistory] = useState([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const termEndRef = useRef(null)
+
+  useEffect(() => {
+    termEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [history, loading])
+
+  const runCommand = async (commandToRun) => {
+    const toExec = (commandToRun || cmd).trim()
+    if (!toExec || loading) return
+    setLoading(true)
+    setCmd('')
+    setCmdHistory(prev => [toExec, ...prev.filter(c => c !== toExec)].slice(0, 50))
+    setHistoryIndex(-1)
+
+    const entryId = Date.now().toString()
+    try {
+      const res = await authFetch(API_URL + '/api/terminal/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: toExec })
+      })
+      const data = await res.json()
+      setHistory(prev => [
+        ...prev,
+        {
+          id: entryId,
+          command: toExec,
+          stdout: data.stdout || '',
+          stderr: data.stderr || '',
+          exit_code: data.exit_code ?? 0,
+          cwd: data.cwd || '',
+          timestamp: new Date().toLocaleTimeString(),
+          error: data.error
+        }
+      ])
+    } catch (e) {
+      setHistory(prev => [
+        ...prev,
+        {
+          id: entryId,
+          command: toExec,
+          stdout: '',
+          stderr: String(e?.message || e),
+          exit_code: 1,
+          timestamp: new Date().toLocaleTimeString(),
+          error: 'Bağlantı hatası'
+        }
+      ])
+    }
+    setLoading(false)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      runCommand()
+    } else if (e.key === 'ArrowUp') {
+      if (cmdHistory.length > 0) {
+        e.preventDefault()
+        const nextIdx = Math.min(historyIndex + 1, cmdHistory.length - 1)
+        setHistoryIndex(nextIdx)
+        setCmd(cmdHistory[nextIdx])
+      }
+    } else if (e.key === 'ArrowDown') {
+      if (historyIndex > 0) {
+        e.preventDefault()
+        const nextIdx = historyIndex - 1
+        setHistoryIndex(nextIdx)
+        setCmd(cmdHistory[nextIdx])
+      } else if (historyIndex === 0) {
+        e.preventDefault()
+        setHistoryIndex(-1)
+        setCmd('')
+      }
+    }
+  }
+
+  const quickCommands = [
+    'git status',
+    'git branch',
+    'dir',
+    'python --version',
+    'node -v',
+    'npm test'
+  ]
+
+  return (
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:'#0d0d11',color:'#e4e4e7',fontFamily:'monospace'}}>
+      {/* Terminal Header */}
+      <div style={{padding:'10px 16px',background:'#15151b',borderBottom:'1px solid rgba(255,255,255,0.1)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{display:'flex',gap:6}}>
+            <span style={{width:10,height:10,borderRadius:'50%',background:'#f87171',display:'inline-block'}} />
+            <span style={{width:10,height:10,borderRadius:'50%',background:'#fbbf24',display:'inline-block'}} />
+            <span style={{width:10,height:10,borderRadius:'50%',background:'#4ade80',display:'inline-block'}} />
+          </div>
+          <span style={{fontSize:13,fontWeight:700,letterSpacing:1,color:'#ffffff'}}>
+            TERMİNAL & CLAUDE CODE ÇALIŞTIRICI
+          </span>
+          {loading && (
+            <span style={{fontSize:11,color:'#fbbf24',background:'rgba(251,191,36,0.15)',padding:'2px 8px',borderRadius:4}}>
+              ● Komut çalıştırılıyor...
+            </span>
+          )}
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <button
+            onClick={() => setHistory([])}
+            style={{padding:'4px 10px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,color:'#a1a1aa',fontSize:12,cursor:'pointer'}}
+          >
+            Temizle
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Command Bar */}
+      <div style={{padding:'8px 16px',background:'#111116',borderBottom:'1px solid rgba(255,255,255,0.06)',display:'flex',gap:6,overflowX:'auto',alignItems:'center'}}>
+        <span style={{fontSize:11,color:'#71717a',marginRight:4}}>Hızlı:</span>
+        {quickCommands.map(qc => (
+          <button
+            key={qc}
+            onClick={() => runCommand(qc)}
+            disabled={loading}
+            style={{padding:'3px 8px',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:4,color:'#d4d4d8',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}
+          >
+            {qc}
+          </button>
+        ))}
+      </div>
+
+      {/* Output Console */}
+      <div style={{flex:1,overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
+        {history.map(item => (
+          <div key={item.id} style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:6,padding:'8px 12px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,fontSize:12}}>
+              <span style={{color:'#60a5fa',fontWeight:600}}>$ {item.command}</span>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:10,color:'#71717a'}}>{item.timestamp}</span>
+                <span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:item.exit_code===0?'rgba(74,222,128,0.15)':'rgba(239,68,68,0.15)',color:item.exit_code===0?'#4ade80':'#f87171'}}>
+                  {item.exit_code === 0 ? '✓ 0' : `exit ${item.exit_code}`}
+                </span>
+              </div>
+            </div>
+            {item.stdout && (
+              <pre style={{margin:0,fontSize:12,color:'#e4e4e7',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.4}}>
+                {item.stdout}
+              </pre>
+            )}
+            {item.stderr && (
+              <pre style={{margin:item.stdout?'6px 0 0 0':0,fontSize:12,color:'#f87171',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.4}}>
+                {item.stderr}
+              </pre>
+            )}
+            {item.error && !item.stderr && (
+              <div style={{fontSize:12,color:'#f87171',marginTop:4}}>
+                Hata: {item.error}
+              </div>
+            )}
+          </div>
+        ))}
+        <div ref={termEndRef} />
+      </div>
+
+      {/* Input Line */}
+      <div style={{padding:'10px 16px',background:'#15151b',borderTop:'1px solid rgba(255,255,255,0.1)',display:'flex',gap:10,alignItems:'center'}}>
+        <span style={{color:'#4ade80',fontSize:14,fontWeight:700}}>$</span>
+        <input
+          type="text"
+          value={cmd}
+          onChange={e => setCmd(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Komut yazın ve Enter'a basın (örn: git status, python script.py, dir)..."
+          disabled={loading}
+          style={{flex:1,background:'transparent',border:'none',outline:'none',color:'#ffffff',fontSize:13,fontFamily:'monospace'}}
+        />
+        <button
+          onClick={() => runCommand()}
+          disabled={loading || !cmd.trim()}
+          style={{padding:'6px 14px',background:loading?'#3f3f46':'#ffffff',color:loading?'#a1a1aa':'#000000',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:loading?'not-allowed':'pointer'}}
+        >
+          {loading ? '...' : 'Çalıştır'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PlansPanel() {
+  const [plans, setPlans] = useState([])
+  const [selectedPlanId, setSelectedPlanId] = useState(null)
+  const [goal, setGoal] = useState('')
+  const [detailLevel, setDetailLevel] = useState('medium')
+  const [creating, setCreating] = useState(false)
+  const [executing, setExecuting] = useState(false)
+  const [statusMsg, setStatusMsg] = useState('')
+
+  const loadPlans = async () => {
+    try {
+      const res = await authFetch(API_URL + '/api/plans')
+      const data = await res.json()
+      if (data.ok && data.plans) {
+        setPlans(data.plans)
+        if (data.plans.length > 0 && !selectedPlanId) {
+          setSelectedPlanId(data.plans[0].id)
+        }
+      }
+    } catch (e) {}
+  }
+
+  useEffect(() => {
+    loadPlans()
+  }, [])
+
+  const handleCreatePlan = async () => {
+    if (!goal.trim() || creating) return
+    setCreating(true)
+    setStatusMsg('')
+    try {
+      const res = await authFetch(API_URL + '/api/plan/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: goal.trim(), detail_level: detailLevel })
+      })
+      const data = await res.json()
+      if (data.ok && data.plan) {
+        setGoal('')
+        await loadPlans()
+        setSelectedPlanId(data.plan.id)
+        setStatusMsg('✓ Plan başarıyla oluşturuldu!')
+      } else {
+        setStatusMsg('⚠️ Plan oluşturulamadı: ' + (data.error || 'Bilinmeyen hata'))
+      }
+    } catch (e) {
+      setStatusMsg('⚠️ Bağlantı hatası: ' + (e?.message || e))
+    }
+    setCreating(false)
+    setTimeout(() => setStatusMsg(''), 5000)
+  }
+
+  const handleExecutePlan = async (pId) => {
+    const idToExec = pId || selectedPlanId
+    if (!idToExec || executing) return
+    setExecuting(true)
+    setStatusMsg('⚡ Plan adımları yürütülüyor...')
+    try {
+      const res = await authFetch(API_URL + '/api/plan/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_id: idToExec })
+      })
+      const data = await res.json()
+      if (data.ok && data.plan) {
+        await loadPlans()
+        setStatusMsg(`✓ Plan tamamlandı! (${data.plan.status})`)
+      } else {
+        setStatusMsg('⚠️ Yürütme hatası: ' + (data.error || 'Bilinmeyen hata'))
+      }
+    } catch (e) {
+      setStatusMsg('⚠️ Bağlantı hatası: ' + (e?.message || e))
+    }
+    setExecuting(false)
+    setTimeout(() => setStatusMsg(''), 6000)
+  }
+
+  const handleDeletePlan = async (pId) => {
+    try {
+      await authFetch(API_URL + `/api/plan/${pId}`, { method: 'DELETE' })
+      await loadPlans()
+      if (selectedPlanId === pId) {
+        setSelectedPlanId(null)
+      }
+    } catch (e) {}
+  }
+
+  const activePlan = plans.find(p => p.id === selectedPlanId) || plans[0]
+
+  return (
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:'#121212',color:'#e4e4e7',fontFamily:'monospace'}}>
+      {/* Plans Header */}
+      <div style={{padding:'12px 18px',background:'#18181b',borderBottom:'1px solid rgba(255,255,255,0.1)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:16}}>📋</span>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,letterSpacing:1,color:'#ffffff'}}>
+              GÖREV PLANLAYICI (TASK PLANNER)
+            </div>
+            <div style={{fontSize:11,color:'#a1a1aa'}}>
+              Karmaşık hedefleri analiz eder, adım adım eylemlere böler ve sırayla yürütür.
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button
+            onClick={loadPlans}
+            style={{padding:'5px 12px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,color:'#d4d4d8',fontSize:12,cursor:'pointer'}}
+          >
+            🔄 Yenile
+          </button>
+        </div>
+      </div>
+
+      {/* Main Body */}
+      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+        {/* Left Sidebar: Plan List & Creator */}
+        <div style={{width:320,borderRight:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',background:'#141417',flexShrink:0}}>
+          {/* Create Goal Form */}
+          <div style={{padding:14,borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',flexDirection:'column',gap:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#ffffff'}}>YENİ HEDEF / PLAN</div>
+            <textarea
+              rows={3}
+              value={goal}
+              onChange={e => setGoal(e.target.value)}
+              placeholder="Örn: Projedeki bağımlılıkları güncelle ve testleri çalıştır..."
+              style={{background:'#1e1e24',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,padding:8,color:'#ffffff',fontSize:12,fontFamily:'monospace',resize:'none',outline:'none'}}
+            />
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <select
+                value={detailLevel}
+                onChange={e => setDetailLevel(e.target.value)}
+                style={{flex:1,background:'#1e1e24',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,padding:'6px 8px',color:'#d4d4d8',fontSize:11,outline:'none'}}
+              >
+                <option value="low">Özet (3-4 Adım)</option>
+                <option value="medium">Standart (5-8 Adım)</option>
+                <option value="high">Detaylı (8+ Adım)</option>
+              </select>
+              <button
+                onClick={handleCreatePlan}
+                disabled={creating || !goal.trim()}
+                style={{padding:'6px 12px',background:creating?'#3f3f46':'#ffffff',color:creating?'#a1a1aa':'#000000',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:creating?'not-allowed':'pointer'}}
+              >
+                {creating ? 'Oluşturuluyor...' : '⚡ Plan Oluştur'}
+              </button>
+            </div>
+            {statusMsg && (
+              <div style={{fontSize:11,color:statusMsg.includes('✓')?'#4ade80':'#f87171',marginTop:4}}>
+                {statusMsg}
+              </div>
+            )}
+          </div>
+
+          {/* Plan History List */}
+          <div style={{flex:1,overflowY:'auto',padding:8,display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#71717a',padding:'4px 6px'}}>
+              PLANLAR ({plans.length})
+            </div>
+            {plans.length === 0 ? (
+              <div style={{fontSize:12,color:'#71717a',padding:'12px 6px',textAlign:'center'}}>
+                Henüz plan oluşturulmadı.
+              </div>
+            ) : (
+              plans.map(p => {
+                const isSelected = activePlan && activePlan.id === p.id
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedPlanId(p.id)}
+                    style={{
+                      padding:'8px 10px',
+                      borderRadius:6,
+                      background:isSelected?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.02)',
+                      border:isSelected?'1px solid rgba(255,255,255,0.2)':'1px solid rgba(255,255,255,0.05)',
+                      cursor:'pointer',
+                      display:'flex',
+                      flexDirection:'column',
+                      gap:4
+                    }}
+                  >
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span style={{fontSize:12,fontWeight:600,color:isSelected?'#ffffff':'#d4d4d8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>
+                        {p.goal}
+                      </span>
+                      <span style={{
+                        fontSize:10,
+                        padding:'1px 5px',
+                        borderRadius:3,
+                        background:p.status==='completed'?'rgba(74,222,128,0.2)':p.status==='failed'?'rgba(239,68,68,0.2)':'rgba(251,191,36,0.2)',
+                        color:p.status==='completed'?'#4ade80':p.status==='failed'?'#f87171':'#fbbf24'
+                      }}>
+                        {p.status}
+                      </span>
+                    </div>
+                    <div style={{fontSize:10,color:'#71717a',display:'flex',justifyContent:'space-between'}}>
+                      <span>{p.steps?.length || 0} Adım</span>
+                      <span>{p.created_at ? new Date(p.created_at).toLocaleTimeString() : ''}</span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right Content: Active Plan Details */}
+        <div style={{flex:1,overflowY:'auto',padding:20,display:'flex',flexDirection:'column',gap:16}}>
+          {activePlan ? (
+            <>
+              {/* Plan Card */}
+              <div style={{background:'#1a1a1f',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,padding:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:10,marginBottom:12}}>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:700,color:'#ffffff',marginBottom:4}}>
+                      {activePlan.goal}
+                    </div>
+                    <div style={{fontSize:12,color:'#a1a1aa'}}>
+                      Oluşturulma: {activePlan.created_at || 'Bilinmiyor'} · Toplam Adım: {activePlan.steps?.length || 0}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button
+                      onClick={() => handleExecutePlan(activePlan.id)}
+                      disabled={executing}
+                      style={{padding:'8px 16px',background:executing?'#3f3f46':'#4ade80',color:'#000000',border:'none',borderRadius:6,fontSize:13,fontWeight:700,cursor:executing?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:6}}
+                    >
+                      {executing ? '⏳ Yürütülüyor...' : '▶️ Planı Yürüt'}
+                    </button>
+                    <button
+                      onClick={() => handleDeletePlan(activePlan.id)}
+                      style={{padding:'8px 12px',background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#f87171',fontSize:12,cursor:'pointer'}}
+                    >
+                      🗑️ Sil
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                {activePlan.steps && activePlan.steps.length > 0 && (
+                  <div style={{marginTop:8}}>
+                    {(() => {
+                      const completedCount = activePlan.steps.filter(s => s.status === 'completed').length
+                      const pct = Math.round((completedCount / activePlan.steps.length) * 100)
+                      return (
+                        <div>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#a1a1aa',marginBottom:4}}>
+                            <span>İlerleme: %{pct} ({completedCount}/{activePlan.steps.length} Tamamlandı)</span>
+                            <span style={{color:activePlan.status==='completed'?'#4ade80':'#fbbf24',fontWeight:600}}>{activePlan.status.toUpperCase()}</span>
+                          </div>
+                          <div style={{height:6,background:'rgba(255,255,255,0.08)',borderRadius:3,overflow:'hidden'}}>
+                            <div style={{height:'100%',width:`${pct}%`,background:pct===100?'#4ade80':'#60a5fa',transition:'width 0.3s'}} />
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Steps List */}
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <div style={{fontSize:13,fontWeight:700,letterSpacing:1,color:'#ffffff'}}>
+                  ADIM ADIM YÜRÜTME LİSTESİ
+                </div>
+                {(!activePlan.steps || activePlan.steps.length === 0) ? (
+                  <div style={{fontSize:13,color:'#71717a'}}>Bu planda henüz adım bulunmuyor.</div>
+                ) : (
+                  activePlan.steps.map((st, idx) => {
+                    const isDone = st.status === 'completed'
+                    const isRunning = st.status === 'running'
+                    const isFailed = st.status === 'failed'
+                    return (
+                      <div
+                        key={st.step || idx}
+                        style={{
+                          background:'#15151a',
+                          border: `1px solid ${isDone ? 'rgba(74,222,128,0.3)' : isFailed ? 'rgba(239,68,68,0.3)' : isRunning ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                          borderRadius:8,
+                          padding:'12px 14px',
+                          display:'flex',
+                          flexDirection:'column',
+                          gap:8
+                        }}
+                      >
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:10}}>
+                            <span style={{
+                              width:24,
+                              height:24,
+                              borderRadius:'50%',
+                              background:isDone?'#4ade80':isFailed?'#f87171':isRunning?'#fbbf24':'rgba(255,255,255,0.1)',
+                              color:isDone||isFailed||isRunning?'#000000':'#ffffff',
+                              display:'inline-flex',
+                              alignItems:'center',
+                              justifyContent:'center',
+                              fontSize:11,
+                              fontWeight:700
+                            }}>
+                              {isDone ? '✓' : isFailed ? '✕' : isRunning ? '●' : (st.step || idx + 1)}
+                            </span>
+                            <span style={{fontSize:13,fontWeight:600,color:'#ffffff'}}>
+                              {st.title || st.description || `Adım ${idx + 1}`}
+                            </span>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            {st.tool && (
+                              <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:'rgba(255,255,255,0.06)',color:'#93c5fd',fontFamily:'monospace'}}>
+                                🔧 {st.tool}
+                              </span>
+                            )}
+                            <span style={{
+                              fontSize:11,
+                              padding:'2px 8px',
+                              borderRadius:4,
+                              background:isDone?'rgba(74,222,128,0.15)':isFailed?'rgba(239,68,68,0.15)':isRunning?'rgba(251,191,36,0.15)':'rgba(255,255,255,0.05)',
+                              color:isDone?'#4ade80':isFailed?'#f87171':isRunning?'#fbbf24':'#a1a1aa',
+                              fontWeight:600
+                            }}>
+                              {st.status || 'pending'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {st.description && st.description !== st.title && (
+                          <div style={{fontSize:12,color:'#a1a1aa',paddingLeft:34}}>
+                            {st.description}
+                          </div>
+                        )}
+
+                        {st.result && (
+                          <div style={{marginLeft:34,background:'rgba(0,0,0,0.3)',borderRadius:6,padding:8,fontSize:11,color:'#d4d4d8',border:'1px solid rgba(255,255,255,0.05)',maxHeight:120,overflowY:'auto',whiteSpace:'pre-wrap'}}>
+                            {typeof st.result === 'object' ? JSON.stringify(st.result, null, 2) : String(st.result)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',color:'#71717a',gap:12}}>
+              <span style={{fontSize:40}}>📋</span>
+              <div style={{fontSize:14}}>Görüntülemek için soldan bir plan seçin veya yeni bir hedef girin.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, onAutoSpeakChange, isTab = false }) {
   const [subTab, setSubTab] = useState('basic') // 'basic' | 'advanced'
   const [keys, setKeys] = useState(() => {
@@ -3176,6 +3751,105 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
   const [serverCfg, setServerCfg] = useState(null)
   const [refreshingModels, setRefreshingModels] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState('')
+  const [accessCode, setAccessCode] = useState(() => {
+    try { return localStorage.getItem('ales_access_code') || '' } catch { return '' }
+  })
+  const [profileName, setProfileName] = useState(() => {
+    try { return localStorage.getItem('ales_profile_name') || 'Varsayılan Profil' } catch { return 'Varsayılan Profil' }
+  })
+  const [profileMsg, setProfileMsg] = useState('')
+  const [profileLoading, setProfileLoading] = useState(false)
+
+  const loadProfile = async (codeToLoad) => {
+    const code = (codeToLoad || accessCode).trim()
+    if (!code) {
+      setProfileMsg('⚠️ Lütfen bir erişim kodu girin')
+      return
+    }
+    setProfileLoading(true)
+    setProfileMsg('')
+    try {
+      const res = await authFetch(API_URL + '/api/profile/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_code: code })
+      })
+      const data = await res.json()
+      if (data.ok && data.keys) {
+        setKeys(prev => ({
+          ...prev,
+          groq: data.keys.groq_key || prev.groq,
+          cerebras: data.keys.cerebras_key || prev.cerebras,
+          openai: data.keys.openai_key || prev.openai,
+          elevenlabs: data.keys.elevenlabs_key || prev.elevenlabs,
+          gemini: data.keys.gemini_key || prev.gemini,
+          sambanova: data.keys.sambanova_key || prev.sambanova,
+          openrouter: data.keys.openrouter_key || prev.openrouter,
+          nvidia: data.keys.nvidia_key || prev.nvidia,
+        }))
+        if (data.profile?.name) setProfileName(data.profile.name)
+        try {
+          localStorage.setItem('ales_access_code', code)
+          if (data.profile?.name) localStorage.setItem('ales_profile_name', data.profile.name)
+        } catch (e) {}
+        await authFetch(API_URL + '/api/session/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys: data.keys })
+        }).catch(() => {})
+        setProfileMsg('✓ Profil ve anahtarlar başarıyla yüklendi!')
+      } else {
+        setProfileMsg('⚠️ ' + (data.error || 'Profil bulunamadı'))
+      }
+    } catch (e) {
+      setProfileMsg('⚠️ Yükleme hatası: ' + (e?.message || e))
+    }
+    setProfileLoading(false)
+    setTimeout(() => setProfileMsg(''), 5000)
+  }
+
+  const saveProfile = async () => {
+    const code = accessCode.trim()
+    if (!code) {
+      setProfileMsg('⚠️ Lütfen profil için bir erişim kodu belirleyin')
+      return
+    }
+    setProfileLoading(true)
+    setProfileMsg('')
+    try {
+      const payload = {
+        access_code: code,
+        name: profileName.trim() || 'Kullanıcı Profili',
+        groq_key: keys.groq.trim(),
+        gemini_key: keys.gemini.trim(),
+        openai_key: keys.openai.trim(),
+        elevenlabs_key: keys.elevenlabs.trim(),
+        cerebras_key: keys.cerebras.trim(),
+        sambanova_key: keys.sambanova.trim(),
+        openrouter_key: keys.openrouter.trim(),
+        nvidia_key: keys.nvidia.trim(),
+      }
+      const res = await authFetch(API_URL + '/api/profile/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (data.ok) {
+        try {
+          localStorage.setItem('ales_access_code', code)
+          localStorage.setItem('ales_profile_name', payload.name)
+        } catch (e) {}
+        setProfileMsg('✓ Profil kalıcı olarak SQLite veritabanına kaydedildi!')
+      } else {
+        setProfileMsg('⚠️ ' + (data.error || 'Kayıt başarısız'))
+      }
+    } catch (e) {
+      setProfileMsg('⚠️ Kayıt hatası: ' + (e?.message || e))
+    }
+    setProfileLoading(false)
+    setTimeout(() => setProfileMsg(''), 5000)
+  }
 
   useEffect(() => {
     authFetch(API_URL+'/config').then(r=>r.json()).then(cfg=>{
@@ -3266,6 +3940,17 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
       }).catch(()=>{})
       authFetch(API_URL+'/config').then(r=>r.json()).then(setServerCfg).catch(()=>{})
       if (isCloud) authFetch(API_URL+'/status').then(r=>r.json()).then(setCloudStatus).catch(()=>{})
+      if (accessCode.trim()) {
+        authFetch(API_URL + '/api/profile/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_code: accessCode.trim(),
+            name: profileName.trim() || 'Kullanıcı Profili',
+            ...data
+          })
+        }).catch(() => {})
+      }
     } catch(e) {}
     setSaved(true)
     setTimeout(()=>{
@@ -3381,6 +4066,58 @@ function SettingsPanel({ onClose, pendingSkills = 0, onSkillsChange, autoSpeak, 
         <div style={{display:'flex',flexDirection:'column',gap:16}}>
           {/* Model / Mod Seçimi */}
           <ModeSelector />
+
+          {/* PROFİL & ERİŞİM KODU (Anahtarları Kalıcı Sakla) */}
+          <div style={{background:'#1E1E24',border:'1px solid rgba(255,255,255,0.18)',borderRadius:10,padding:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
+              <div style={{fontSize:14,fontWeight:700,color:'#ffffff',fontFamily:'monospace',display:'flex',alignItems:'center',gap:8}}>
+                <span>🔑</span> PROFİL & ERİŞİM KODU (Kalıcı Saklama & Otomatik Yükleme)
+              </div>
+              {accessCode && (
+                <span style={{fontSize:11,color:'#4ade80',fontFamily:'monospace',background:'rgba(74,222,128,0.1)',padding:'3px 8px',borderRadius:4,border:'1px solid rgba(74,222,128,0.3)'}}>
+                  AKTİF KOD: {accessCode}
+                </span>
+              )}
+            </div>
+            <div style={{fontSize:12,color:'#A1A1AA',fontFamily:'monospace',marginBottom:12,lineHeight:1.5}}>
+              API anahtarlarınızı bir erişim koduna (şifrenize) bağlayarak SQLite veritabanında saklayın. Sayfayı yenilediğinizde veya Render/Cloud yeniden başladığında anahtarlarınız otomatik yüklenir.
+            </div>
+            <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+              <input
+                type="text"
+                placeholder="Erişim Kodu (örn: my-secret-code)"
+                value={accessCode}
+                onChange={e=>setAccessCode(e.target.value)}
+                style={{...iStyle,flex:1,minWidth:170}}
+              />
+              <input
+                type="text"
+                placeholder="Profil Adı (örn: Ali)"
+                value={profileName}
+                onChange={e=>setProfileName(e.target.value)}
+                style={{...iStyle,flex:1,minWidth:140}}
+              />
+              <button
+                onClick={()=>loadProfile()}
+                disabled={profileLoading}
+                style={{padding:'10px 16px',background:'#27272A',border:'1px solid rgba(255,255,255,0.25)',borderRadius:8,color:'#ffffff',fontSize:13,fontWeight:700,cursor:profileLoading?'not-allowed':'pointer',fontFamily:'monospace'}}
+              >
+                📥 YÜKLE
+              </button>
+              <button
+                onClick={saveProfile}
+                disabled={profileLoading}
+                style={{padding:'10px 16px',background:'#ffffff',border:'none',borderRadius:8,color:'#000000',fontSize:13,fontWeight:700,cursor:profileLoading?'not-allowed':'pointer',fontFamily:'monospace'}}
+              >
+                💾 PROFİLİ KAYDET
+              </button>
+            </div>
+            {profileMsg && (
+              <div style={{marginTop:10,fontSize:12,fontFamily:'monospace',color:profileMsg.includes('✓')?'#4ade80':'#f87171'}}>
+                {profileMsg}
+              </div>
+            )}
+          </div>
 
           {/* Temel API Anahtarları: Sadece Groq ve Gemini */}
           <div>

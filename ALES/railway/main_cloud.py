@@ -71,6 +71,16 @@ except Exception as _e:
     document_generator = None
 
 try:
+    import profile_manager
+except Exception as _e:
+    profile_manager = None
+
+try:
+    import plan_manager
+except Exception as _e:
+    plan_manager = None
+
+try:
     import model_registry
     import auto_model_discovery
 except Exception as _e:
@@ -150,8 +160,9 @@ DOKÜMAN & PDF ÜRETİMİ (TAM AKTİF):
 BU MOD İÇİN FİZİKSEL KISIT:
 - Kullanıcının şahsi bilgisayarının ekranını görme, masaüstü fare/klavyesine tıklama veya kullanıcının yerel C:\\ diskindeki şahsi dosyalarını okuma özellikleri yalnızca yerel masaüstü ALES uygulamasında çalışır.
 
-AGGRESSIVE TOOL EXECUTION (CLAUDE PROTOCOL):
+AGGRESSIVE TOOL EXECUTION & CODING AGENT (CLAUDE CODE PROTOCOL):
 - NEVER explain how to do a task if you have a tool for it. YOU MUST execute the task directly.
+- You are a Senior Software Engineer. When asked to code or fix something, DO NOT explain. Read the file, write the new code, and run the command to test it. Act like a terminal agent.
 - If the user asks for a PDF, document, or report, DO NOT give them Python instructions or tutorial code. Provide the complete structured report text directly so the system compiles it into a downloadable PDF immediately.
 - Kullanıcı bir PDF, rapor veya doküman dosyası oluşturulmasını istediğinde ASLA nasıl yapılacağını veya Python kodunu anlatma; doğrudan içeriği eksiksiz üret.
 
@@ -826,6 +837,190 @@ async def cloud_speak_api(payload: dict):
         return {"ok": False, "error": "Ses üretilemedi"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+# ─── PROFİL & KALICI API ANAHTARI YÖNETİMİ (SQLite) ───────────────
+@app.post("/api/profile/save")
+async def cloud_profile_save_api(data: dict):
+    if not profile_manager:
+        return {"ok": False, "error": "profile_manager modülü aktif değil"}
+    try:
+        code = (data.get("access_code") or "").strip()
+        name = (data.get("name") or "").strip()
+        keys = data.get("keys") or data
+        res = profile_manager.save_profile(code, name, keys)
+        if res.get("ok"):
+            import config_manager as cm
+            cfg = cm.load_config()
+            env_map = {
+                "groq_key": "GROQ_API_KEY",
+                "cerebras_key": "CEREBRAS_API_KEY",
+                "openai_key": "OPENAI_API_KEY",
+                "elevenlabs_key": "ELEVENLABS_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "sambanova_key": "SAMBANOVA_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "nvidia_key": "NVIDIA_API_KEY",
+            }
+            for k, env in env_map.items():
+                val = keys.get(k) or keys.get(k.replace("_key", ""))
+                if val and str(val).strip():
+                    clean_val = str(val).strip()
+                    _SESSION_KEYS[k] = clean_val
+                    cfg[k] = clean_val
+                    os.environ[env] = clean_val
+            cm.save_config(cfg)
+        return res
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/profile/load")
+@app.get("/api/profile/load")
+async def cloud_profile_load_api(request: Request):
+    if not profile_manager:
+        return {"ok": False, "error": "profile_manager modülü aktif değil"}
+    try:
+        code = ""
+        if request.method == "POST":
+            body = await request.json()
+            code = (body.get("access_code") or "").strip()
+        else:
+            code = (request.query_params.get("access_code") or "").strip()
+
+        res = profile_manager.load_profile(code)
+        if res.get("ok") and res.get("keys"):
+            import config_manager as cm
+            cfg = cm.load_config()
+            env_map = {
+                "groq_key": "GROQ_API_KEY",
+                "cerebras_key": "CEREBRAS_API_KEY",
+                "openai_key": "OPENAI_API_KEY",
+                "elevenlabs_key": "ELEVENLABS_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "sambanova_key": "SAMBANOVA_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "nvidia_key": "NVIDIA_API_KEY",
+            }
+            for k, val in res["keys"].items():
+                if val:
+                    _SESSION_KEYS[k] = val
+                    cfg[k] = val
+                    if k in env_map:
+                        os.environ[env_map[k]] = val
+            cm.save_config(cfg)
+        return res
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/profiles")
+async def cloud_profiles_list_api():
+    if not profile_manager:
+        return {"ok": False, "profiles": []}
+    try:
+        return {"ok": True, "profiles": profile_manager.list_profiles()}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "profiles": []}
+
+# ─── GÖREV VE EYLEM PLANLAMA MOTORU (Plan Manager) ───────────────
+@app.post("/api/plan/create")
+async def cloud_plan_create_api(data: dict):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager modülü aktif değil"}
+    goal = (data.get("goal") or "").strip()
+    if not goal:
+        return {"ok": False, "error": "Hedef belirtilmelidir."}
+    try:
+        async def _llm_caller(prompt, system):
+            for name, caller in _PROVIDER_CHAIN:
+                ok, text = await caller(prompt, system)
+                if ok:
+                    return ok, text
+            return False, ""
+
+        plan = await plan_manager.generate_plan_with_llm(goal, _llm_caller)
+        return {"ok": True, "plan": plan}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/plan/execute")
+async def cloud_plan_execute_api(data: dict):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager modülü aktif değil"}
+    plan_id = (data.get("plan_id") or "").strip()
+    if not plan_id:
+        return {"ok": False, "error": "plan_id gereklidir."}
+    try:
+        async def _exec_tool(tool_name, args):
+            if tool_name == "read_file":
+                p = Path(args.get("path", "."))
+                if p.exists() and p.is_file():
+                    return p.read_text(encoding="utf-8", errors="ignore")[:2000]
+                return "Dosya okunamadı veya bulunamadı"
+            elif tool_name == "generate_pdf" and document_generator:
+                res = document_generator.generate_pdf(args.get("title", "Rapor"), args.get("content", ""))
+                return res.get("message", "PDF oluşturuldu")
+            elif tool_name == "run_terminal_command":
+                cmd = args.get("cmd") or args.get("command", "")
+                import subprocess
+                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                return (res.stdout or res.stderr or "Tamamlandı")[:1500]
+            return f"Adım tamamlandı: {tool_name}"
+
+        res = await plan_manager.execute_plan(plan_id, _exec_tool)
+        return {"ok": True, "plan": res}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/plans")
+async def cloud_plans_list_api():
+    if not plan_manager:
+        return {"ok": False, "plans": []}
+    return {"ok": True, "plans": plan_manager.list_plans()}
+
+@app.get("/api/plan/{plan_id}")
+async def cloud_plan_get_api(plan_id: str):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager aktif değil"}
+    p = plan_manager.get_plan(plan_id)
+    if not p:
+        return {"ok": False, "error": "Plan bulunamadı"}
+    return {"ok": True, "plan": p}
+
+@app.delete("/api/plan/{plan_id}")
+async def cloud_plan_delete_api(plan_id: str):
+    if not plan_manager:
+        return {"ok": False, "error": "plan_manager aktif değil"}
+    ok = plan_manager.delete_plan(plan_id)
+    return {"ok": ok}
+
+# ─── KODLAMA VE CANLI TERMİNAL ÇALIŞTIRICI (Coding Agent Terminal) ─
+@app.post("/api/terminal/run")
+async def cloud_terminal_run_api(data: dict):
+    cmd = (data.get("command") or data.get("cmd") or "").strip()
+    timeout = int(data.get("timeout") or 30)
+    if not cmd:
+        return {"ok": False, "error": "Komut boş olamaz"}
+    try:
+        import subprocess
+        res = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(BASE_DIR)
+        )
+        return {
+            "ok": True,
+            "command": cmd,
+            "exit_code": res.returncode,
+            "stdout": res.stdout or "",
+            "stderr": res.stderr or "",
+            "time": datetime.now().isoformat()
+        }
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "command": cmd, "error": f"Komut zaman aşımına uğradı ({timeout}s)", "exit_code": -1}
+    except Exception as e:
+        return {"ok": False, "command": cmd, "error": str(e), "exit_code": -1}
 
 @app.get("/api/download/pdf/{filename}")
 async def download_pdf_endpoint(filename: str):

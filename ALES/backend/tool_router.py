@@ -17,12 +17,13 @@ teknigi - kucuk/ucretsiz modellerle buyuk fark yaratir.
 CORE_TOOLS = {
     "remember_fact", "search_memory", "get_user_profile",
     "add_pending_approval", "get_system_info", "generate_pdf",
+    "read_file", "write_file", "run_terminal_command",
 }
 
 # Bu kategoriler HER ZAMAN aktif - ALES'in "Claude gibi" temel
 # yetenekleri. Kisitlanirsa model elinde arac olmadigi icin
 # "yapamiyorum" der.
-ALWAYS_INCLUDE_CATEGORIES = ["pc_control", "filesystem", "document", "web", "code", "worldview", "memory"]
+ALWAYS_INCLUDE_CATEGORIES = ["pc_control", "filesystem", "document", "web", "code", "terminal", "worldview", "memory"]
 
 # Kategori -> anahtar kelimeler -> arac isimleri
 TOOL_CATEGORIES = {
@@ -74,20 +75,16 @@ TOOL_CATEGORIES = {
     },
     "code": {
         "keywords": ["kod", "python", "hesapla", "calistir", "çalıştır", "script",
-                      "fonksiyon", "program", "yazılım", "yazilim", "debug"],
-        "tools": ["run_python_code"]
+                      "fonksiyon", "program", "yazılım", "yazilim", "debug", "test",
+                      "hata", "duzelt", "düzelt", "refactor"],
+        "tools": ["run_python_code", "run_terminal_command", "read_file", "write_file", "edit_file"]
     },
-    # ── Kabuk komutu (OPT-IN) ────────────────────────────────────────
-    # NEDEN ALWAYS_INCLUDE DEGIL: run_python_code zaten her mesajda acik ve
-    # daha genel. Terminal araci bunun uzerine "git status / npm run build /
-    # dir" gibi komutlari DOGAL bicimde eklemek icin var; her istekte sema
-    # gondermek token harcar ve kucuk modelde "python mi kabuk mu" ikilemi
-    # yaratir. Anahtar kelime gelince aciliyor.
+    # ── Kabuk komutu (Terminal / Shell) ──────────────────────────────
     "terminal": {
         "keywords": ["terminal", "komut satiri", "komut satırı", "cmd", "powershell",
                       "kabuk", "shell", "bash", "git ", "npm", "pip install",
-                      "derle", "build", "komutu calistir", "komutu çalıştır"],
-        "tools": ["openclaw_terminal"]
+                      "derle", "build", "komutu calistir", "komutu çalıştır", "run"],
+        "tools": ["run_terminal_command", "openclaw_terminal"]
     },
     # ── OpenClaw koprusu (OPT-IN) ────────────────────────────────────
     # Bu araclarin yaptigi isi ALES yerel olarak DA yapiyor (list_windows /
