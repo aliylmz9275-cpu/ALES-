@@ -71,8 +71,9 @@ cd backend
 pip install -r requirements.txt
 python main.py
 ```
-```bash
+
 Setup Frontend
+```bash
 bash
 cd frontend
 npm install
