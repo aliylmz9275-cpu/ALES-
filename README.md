@@ -70,3 +70,12 @@ Inspired by Claude Code, ALES operates using a strict **ReAct (Reason + Act)** l
 cd backend
 pip install -r requirements.txt
 python main.py
+
+Setup Frontend
+bash
+cd frontend
+npm install
+npm run build
+Package as EXE
+bash
+npx electron-builder --win portable
