@@ -1,0 +1,16 @@
+{
+  "destructive_patterns": [
+    "rm -rf", "rm -r", "rmdir", "del /s", "del /f",
+    "git push", "git push --force", "git reset --hard",
+    "pip uninstall", "npm uninstall",
+    "format ", "shutdown", "taskkill",
+    "DROP TABLE", "DROP DATABASE", "DELETE FROM",
+    "Remove-Item -Recurse"
+  ],
+  "always_allow": [
+    "ls", "dir", "cat", "type", "echo", "pwd", "cd",
+    "git status", "git log", "git diff", "git branch",
+    "pip list", "pip show", "npm list",
+    "python --version", "node --version"
+  ]
+}
