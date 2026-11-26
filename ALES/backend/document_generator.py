@@ -32,10 +32,21 @@ STATIC_PDFS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _clean_text_for_pdf(text: str) -> str:
-    """XML ve HTML kaçış karakterlerini düzenler."""
+    """LLM çıktısındaki ham kaçış karakterlerini ve XML özel karakterlerini düzenler.
+
+    LLM'ler sıklıkla JSON tool_call argümanlarında satır sonlarını '\\n'
+    (iki karakter: backslash + n) olarak gönderir. ReportLab bunları literal
+    olarak basar — çirkin '\\n' gösterir. Ayrıca '\\t' ve çift-ters-eğik
+    çizgi de temizlenir.
+    """
     if not text:
         return ""
     t = str(text)
+    # 1. LLM'in gönderdiği literal kaçış dizilerini gerçek karakterlere çevir
+    t = t.replace("\\n", "\n")
+    t = t.replace("\\t", "    ")
+    t = t.replace("\\\\", "\\")
+    # 2. XML özel karakterlerini ReportLab Paragraph için güvenli hale getir
     t = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return t
 
@@ -49,9 +60,12 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
         from reportlab.lib.pagesizes import letter, A4
         from reportlab.lib import colors
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_JUSTIFY
         from reportlab.platypus import (
             SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Preformatted
         )
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
         from reportlab.pdfgen import canvas
     except ImportError as e:
         return {
@@ -59,12 +73,68 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             "error": f"ReportLab kütüphanesi eksik: {e}. Lütfen 'pip install reportlab' kurun."
         }
 
-    safe_title = re.sub(r"[^\w\-_]", "_", title.strip()) or "Belge"
+    # ── İÇERİĞİ TEMİZLE (LLM literal \n / JSON escape sorununu çöz) ──
+    # LLM tool_call argümanlarında satır sonlarını çoğunlukla literal
+    # '\\n' (iki karakter) olarak gönderir. Önce bunları gerçek newline'a çevir.
+    clean_content = str(content or "")
+    clean_content = clean_content.replace("\\n", "\n")
+    clean_content = clean_content.replace("\\t", "    ")
+    clean_content = clean_content.replace("\\\\", "\\")
+    # Üst üste gelen boş satırları tek satıra düşür
+    clean_content = re.sub(r"\n{3,}", "\n\n", clean_content)
+    clean_title = str(title or "Belge").replace("\\n", " ").strip()
+
+    safe_title = re.sub(r"[^\w\-_]", "_", clean_title) or "Belge"
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_title}_{timestamp_str}.pdf"
     pdf_path = STATIC_PDFS_DIR / filename
 
     try:
+        # ── Türkçe karakter desteği: DejaVuSans (UTF-8 tam Unicode) ──
+        _FONT_REG = "DejaVuSans"
+        _FONT_BOLD = "DejaVuSans-Bold"
+        _FONT_MONO = "DejaVuMono"
+        _turkish_font_ok = False
+        try:
+            import shutil
+            # Windows'ta DejaVu genelde yoktur; sistem fontlarından bul
+            _font_dirs = [
+                Path(__file__).resolve().parent / "fonts",
+                Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
+                Path("/usr/share/fonts/truetype/dejavu"),
+                Path("/usr/share/fonts/dejavu"),
+            ]
+            _reg_path = _bold_path = _mono_path = None
+            for fd in _font_dirs:
+                if not fd.exists():
+                    continue
+                for f in fd.iterdir():
+                    nm = f.name.lower()
+                    if "dejavusans" in nm and "bold" not in nm and "oblique" not in nm and nm.endswith(".ttf"):
+                        _reg_path = _reg_path or f
+                    if "dejavusans" in nm and "bold" in nm and "oblique" not in nm and nm.endswith(".ttf"):
+                        _bold_path = _bold_path or f
+                    if "dejavusansmono" in nm and "bold" not in nm and "oblique" not in nm and nm.endswith(".ttf"):
+                        _mono_path = _mono_path or f
+            if _reg_path:
+                pdfmetrics.registerFont(TTFont(_FONT_REG, str(_reg_path)))
+                if _bold_path:
+                    pdfmetrics.registerFont(TTFont(_FONT_BOLD, str(_bold_path)))
+                else:
+                    _FONT_BOLD = _FONT_REG
+                if _mono_path:
+                    pdfmetrics.registerFont(TTFont(_FONT_MONO, str(_mono_path)))
+                else:
+                    _FONT_MONO = "Courier"
+                _turkish_font_ok = True
+        except Exception as font_err:
+            print(f"[PDF] DejaVu font yüklenemedi, Helvetica kullanılacak: {font_err}")
+
+        if not _turkish_font_ok:
+            _FONT_REG = "Helvetica"
+            _FONT_BOLD = "Helvetica-Bold"
+            _FONT_MONO = "Courier"
+
         # Sayfa numaralandırma için özel Canvas
         class NumberedCanvas(canvas.Canvas):
             def __init__(self, *args, **kwargs):
@@ -85,14 +155,14 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
 
             def draw_page_decorations(self, page_count):
                 self.saveState()
-                self.setFont("Helvetica", 9)
+                self.setFont(_FONT_REG, 9)
                 self.setFillColor(colors.HexColor("#71717A"))
                 # Altbilgi çizgisi
                 self.setStrokeColor(colors.HexColor("#E4E4E7"))
                 self.setLineWidth(0.5)
                 self.line(40, 40, A4[0] - 40, 40)
                 # Sol: Telif/Üreten
-                self.drawString(40, 28, f"ALES Belge Sistemi • {author}")
+                self.drawString(40, 28, f"ALES Belge Sistemi \u2022 {author}")
                 # Sağ: Sayfa Numarası
                 page_text = f"Sayfa {self._pageNumber} / {page_count}"
                 self.drawRightString(A4[0] - 40, 28, page_text)
@@ -113,10 +183,10 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             "DocTitle",
             parent=styles["Heading1"],
             fontSize=22,
-            leading=26,
+            leading=28,
             textColor=colors.HexColor("#0F172A"),
             spaceAfter=6,
-            fontName="Helvetica-Bold"
+            fontName=_FONT_BOLD
         )
         meta_style = ParagraphStyle(
             "DocMeta",
@@ -125,7 +195,7 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             leading=12,
             textColor=colors.HexColor("#64748B"),
             spaceAfter=14,
-            fontName="Helvetica"
+            fontName=_FONT_REG
         )
         h1_style = ParagraphStyle(
             "H1",
@@ -135,7 +205,7 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             textColor=colors.HexColor("#1E293B"),
             spaceBefore=14,
             spaceAfter=6,
-            fontName="Helvetica-Bold"
+            fontName=_FONT_BOLD
         )
         h2_style = ParagraphStyle(
             "H2",
@@ -145,7 +215,7 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             textColor=colors.HexColor("#334155"),
             spaceBefore=10,
             spaceAfter=4,
-            fontName="Helvetica-Bold"
+            fontName=_FONT_BOLD
         )
         body_style = ParagraphStyle(
             "Body",
@@ -154,7 +224,8 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             leading=15,
             textColor=colors.HexColor("#334155"),
             spaceAfter=6,
-            fontName="Helvetica"
+            fontName=_FONT_REG,
+            alignment=TA_JUSTIFY
         )
         code_style = ParagraphStyle(
             "CodeBlock",
@@ -168,7 +239,7 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             borderPadding=6,
             spaceBefore=6,
             spaceAfter=8,
-            fontName="Courier"
+            fontName=_FONT_MONO
         )
         bullet_style = ParagraphStyle(
             "Bullet",
@@ -176,21 +247,21 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
             leftIndent=15,
             bulletIndent=5,
             spaceAfter=3,
-            fontName="Helvetica"
+            fontName=_FONT_REG
         )
 
         story = []
 
         # 1. Başlık & Meta Bilgi
-        clean_title = _clean_text_for_pdf(title)
-        story.append(Paragraph(clean_title, title_style))
+        pdf_title = _clean_text_for_pdf(clean_title)
+        story.append(Paragraph(pdf_title, title_style))
         date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-        meta_text = f"Oluşturulma Tarihi: {date_str} | Sistem: {author}"
+        meta_text = f"Olu\u015fturulma Tarihi: {date_str} | Sistem: {author}"
         story.append(Paragraph(meta_text, meta_style))
         story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0284C7"), spaceAfter=14))
 
-        # 2. Markdown İçerik Ayrıştırma
-        lines = content.split("\n")
+        # 2. Markdown İçerik Ayrıştırma (temizlenmiş clean_content üzerinde)
+        lines = clean_content.split("\n")
         in_code_block = False
         code_lines = []
 
@@ -235,19 +306,21 @@ def generate_pdf(title: str, content: str, author: str = "ALES AI Assistant") ->
                 # Basit kalın/italik desteği
                 b_text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", b_text)
                 b_text = re.sub(r"\*(.*?)\*", r"<i>\1</i>", b_text)
-                story.append(Paragraph(f"&bull; {b_text}", bullet_style))
+                story.append(Paragraph(f"\u2022 {b_text}", bullet_style))
             elif re.match(r"^\d+\.\s+", trimmed):
-                num_text = re.sub(r"^\d+\.\s+", "", trimmed)
+                num_match = re.match(r"^(\d+)\.\s+(.*)", trimmed)
+                num_prefix = num_match.group(1) if num_match else ""
+                num_text = num_match.group(2) if num_match else trimmed
                 num_text = _clean_text_for_pdf(num_text)
                 num_text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", num_text)
-                story.append(Paragraph(f"&bull; {num_text}", bullet_style))
+                story.append(Paragraph(f"{num_prefix}. {num_text}", bullet_style))
             elif trimmed.startswith("---") or trimmed.startswith("***"):
                 story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#E2E8F0"), spaceAfter=8))
             else:
                 p_text = _clean_text_for_pdf(trimmed)
                 p_text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", p_text)
                 p_text = re.sub(r"\*(.*?)\*", r"<i>\1</i>", p_text)
-                p_text = re.sub(r"`(.*?)`", r"<font name='Courier'>\1</font>", p_text)
+                p_text = re.sub(r"`(.*?)`", rf"<font name='{_FONT_MONO}'>\1</font>", p_text)
                 story.append(Paragraph(p_text, body_style))
 
         # Kapanmamış kod bloğu varsa kapat

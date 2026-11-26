@@ -60,7 +60,7 @@ OPENAI_VOICES = [
     {"id": "sage", "name": "Sage - ChatGPT 4o Yeni Nesil", "engine": "openai"},
     {"id": "coral", "name": "Coral - ChatGPT 4o Sıcak Yeni Nesil", "engine": "openai"},
 ]
-DEFAULT_OPENAI_VOICE = "alloy"
+DEFAULT_OPENAI_VOICE = "nova"
 
 # ElevenLabs'in cok-dilli (Turkce dahil) modelinde dogal sesli,
 # JARVIS tarzina uygun secenekler. Kullanici ayarlardan secebilir.
@@ -82,7 +82,8 @@ def _temp_path(name: str) -> str:
 
 
 def synthesize_openai(text: str, api_key: str, voice_id: str = "alloy"):
-    """OpenAI TTS API - Birebir resmi ChatGPT sesi (alloy, nova, echo, onyx, shimmer, fable)."""
+    """OpenAI TTS API - Birebir resmi ChatGPT sesi (alloy, nova, echo, onyx, shimmer, fable).
+    tts-1-hd modeli ile yüksek kaliteli, gerçekçi ses üretir."""
     if not api_key or not str(api_key).strip():
         return None
     try:
@@ -101,12 +102,13 @@ def synthesize_openai(text: str, api_key: str, voice_id: str = "alloy"):
             "Content-Type": "application/json"
         }
         payload = {
-            "model": "tts-1",
-            "input": text[:2500],
+            "model": "tts-1-hd",
+            "input": text[:4096],
             "voice": target_voice,
-            "response_format": "mp3"
+            "response_format": "mp3",
+            "speed": 1.0
         }
-        with httpx.Client(timeout=25) as client:
+        with httpx.Client(timeout=30) as client:
             r = client.post(url, headers=headers, json=payload)
         if r.status_code == 200 and r.content:
             return r.content
@@ -146,12 +148,12 @@ def synthesize_elevenlabs(text: str, api_key: str, voice_id: str = None):
             "Accept": "audio/mpeg",
         }
         payload = {
-            "text": text[:1500],
+            "text": text[:2000],
             "model_id": "eleven_multilingual_v2",
             "voice_settings": {
-                "stability": 0.35,              # Doğal nefes ve insansı tonlama
-                "similarity_boost": 0.75,
-                "style": 0.35,                  # Konuşma akıcılığı
+                "stability": 0.30,              # Daha doğal nefes ve insansı tonlama
+                "similarity_boost": 0.80,
+                "style": 0.40,                  # Konuşma akıcılığı ve duygu
                 "use_speaker_boost": True,
             },
         }

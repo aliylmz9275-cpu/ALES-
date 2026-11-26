@@ -17,9 +17,15 @@ teknigi - kucuk/ucretsiz modellerle buyuk fark yaratir.
 CORE_TOOLS = {
     "read_file",
     "write_file",
+    "str_replace_editor",
     "run_terminal_command",
     "google_search",
     "generate_pdf",
+    # Computer Use / GUI Agent primitives
+    "take_screenshot",
+    "mouse_click",
+    "keyboard_type",
+    "keyboard_press",
 }
 
 # Varsayılan olarak HER ZAMAN açık kategoriler BOŞTUR.
@@ -36,8 +42,9 @@ TOOL_CATEGORIES = {
     },
     "pc_control": {
         "keywords": ["ekran", "tikla", "yaz", "tus", "ac aç", "uygulama", "screenshot",
-                      "goruntu", "kapat", "minimize", "pencere", "fare", "klavye"],
-        "tools": ["take_screenshot", "open_app", "type_text", "press_key", "click_at",
+                      "goruntu", "kapat", "minimize", "pencere", "fare", "klavye", "mouse", "keyboard"],
+        "tools": ["take_screenshot", "mouse_click", "keyboard_type", "keyboard_press",
+                  "open_app", "type_text", "press_key", "click_at",
                   "analyze_screen", "find_on_screen",
                   "cua_action"]
     },

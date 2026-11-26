@@ -39,19 +39,25 @@ def write_file(path: str, content: str, overwrite: bool = False) -> str:
 
 def edit_file(path: str, old_text: str, new_text: str) -> str:
     """Dosyada metin degistir (find & replace)"""
+    return str_replace_editor(path, old_text, new_text)
+
+def str_replace_editor(file_path: str, old_string: str, new_string: str) -> str:
+    """Claude Code uyumlu kesin metin değiştirici (str_replace_editor).
+    Belirtilen dosyada old_string'i arar ve new_string ile drop-in değiştirir.
+    """
     try:
-        p = _safe_path(path)
+        p = _safe_path(file_path)
         if not p.exists():
             return f"[HATA] Dosya bulunamadi: {p}"
         content = p.read_text(encoding='utf-8', errors='replace')
-        if old_text not in content:
-            return f"[HATA] Belirtilen metin dosyada bulunamadi. Once read_file ile dosyayi kontrol et."
-        count = content.count(old_text)
+        if old_string not in content:
+            return f"[HATA] Belirtilen metin (old_string) dosyada bulunamadı. Lütfen 'read_file' ile dosya içeriğini kontrol edin ve satır/boşluk eşleşmesine dikkat edin."
+        count = content.count(old_string)
         if count > 1:
-            return f"[UYARI] Bu metin dosyada {count} kez geciyor. Daha spesifik bir metin sec (daha fazla baglam ekle)."
-        new_content = content.replace(old_text, new_text)
+            return f"[UYARI] Bu metin dosyada {count} kez geçiyor. Değişikliğin tek ve kesin olması için lütfen etrafındaki birkaç satırı da ekleyerek daha fazla bağlamla çağırın."
+        new_content = content.replace(old_string, new_string)
         p.write_text(new_content, encoding='utf-8')
-        return f"[OK] Duzenlendi: {p}"
+        return f"✅ [OK] Başarıyla güncellendi: {p} (str_replace_editor)"
     except Exception as e:
         return f"[HATA] {e}"
 

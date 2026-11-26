@@ -108,7 +108,7 @@ from fiverr import get_fiverr_messages_manual, get_bionluk_messages_manual, open
 from playwright_browser import browse_sync, search_sync
 from vision import analyze_screen_and_act, find_element_on_screen
 from tunnel import start_ngrok, start_cloudflare_tunnel, get_local_ip, get_tunnel_status
-from filesystem import read_file, write_file, edit_file, list_directory, create_directory, delete_path, search_files, get_file_info, list_skills, read_skill
+from filesystem import read_file, write_file, edit_file, str_replace_editor, list_directory, create_directory, delete_path, search_files, get_file_info, list_skills, read_skill
 from tool_router import select_relevant_tools, get_routing_info, expand_after_tool_call
 import skills_engine
 import connectors
@@ -299,25 +299,49 @@ except Exception as _e:
     plan_manager = None
     print(f"[ALES] plan_manager yuklenemedi: {_e}")
 
+CURRENT_TERMINAL_CWD: str = str(Path(__file__).resolve().parent.parent)
+
 def run_terminal_command(cmd: str, timeout: int = 45) -> str:
-    """Komut satırında (terminal/shell) komut çalıştırır ve çıktısını (stdout/stderr) döner."""
+    """Komut satırında (terminal/shell) komut çalıştırır ve çıktısını (stdout/stderr) döner.
+    Oturum boyunca çalışma dizinini (cwd) saklar ('cd' komutları kalıcıdır).
+    """
+    global CURRENT_TERMINAL_CWD
     if not cmd or not str(cmd).strip():
         return "❌ Komut boş olamaz."
     cmd_str = str(cmd).strip()
+    
+    # 'cd <dizin>' komutlarını tespit edip kalıcı çalışma dizinini güncelle
+    cd_match = re.match(r"^cd\s+(.+)$", cmd_str, re.IGNORECASE)
+    if cd_match:
+        target_dir = cd_match.group(1).strip().strip('"').strip("'")
+        try:
+            new_path = Path(CURRENT_TERMINAL_CWD) / target_dir if not os.path.isabs(target_dir) else Path(target_dir)
+            resolved = new_path.resolve()
+            if resolved.exists() and resolved.is_dir():
+                CURRENT_TERMINAL_CWD = str(resolved)
+                return f"✅ Çalışma dizini değiştirildi: {CURRENT_TERMINAL_CWD}"
+            else:
+                return f"❌ Dizin bulunamadı: {target_dir}"
+        except Exception as e:
+            return f"❌ cd hatası: {e}"
+
     try:
         import subprocess
-        root_dir = Path(__file__).resolve().parent.parent
+        # Eğer dizin mevcut değilse root_dir'e düş
+        if not os.path.exists(CURRENT_TERMINAL_CWD):
+            CURRENT_TERMINAL_CWD = str(Path(__file__).resolve().parent.parent)
+
         res = subprocess.run(
             cmd_str,
             shell=True,
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=str(root_dir)
+            cwd=CURRENT_TERMINAL_CWD
         )
         out = (res.stdout or "").strip()
         err = (res.stderr or "").strip()
-        lines = [f"[Exit Code: {res.returncode}]"]
+        lines = [f"[Exit Code: {res.returncode}]", f"[CWD: {CURRENT_TERMINAL_CWD}]"]
         if out:
             lines.append(f"STDOUT:\n{out}")
         if err:
@@ -398,14 +422,30 @@ def take_screenshot(region: str = "auto") -> str:
     acikca 'tum ekrani' isterse region='full_screen' ile tam ekran alinir."""
     try:
         import tempfile
+        import io
         from vision import _grab_screen
-        # /tmp Windows'ta yok - tempfile.gettempdir() platform-bagimsiz dogru yolu verir
         path = os.path.join(tempfile.gettempdir(), "ales_screen.png")
         img = _grab_screen(region)
         img.save(path)
-        return f"[Ekran goruntusu alindi: {img.size[0]}x{img.size[1]}, kaydedildi: {path}]"
+        # LLM için base64 özetini de üret
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"[Ekran görüntüsü alındı: {img.size[0]}x{img.size[1]}, kaydedildi: {path}]\n[SCREENSHOT_BASE64:data:image/jpeg;base64,{b64[:200]}...({len(b64)} chars)]"
     except Exception as e:
         return f"❌ {e}"
+
+def mouse_click(x: int, y: int) -> str:
+    """Ekranda belirtilen (x, y) piksel koordinatına tıklar."""
+    return click_at(x, y)
+
+def keyboard_type(text: str) -> str:
+    """Klavyeden belirtilen metni yazar."""
+    return type_text(text)
+
+def keyboard_press(key: str) -> str:
+    """Klavyeden belirtilen tuşa basar (enter, tab, esc, ctrl+c vb.)."""
+    return press_key(key)
 
 def open_app(app_name: str) -> str:
     """
@@ -672,12 +712,16 @@ TOOLS = [
     # ── 5 ÇEKİRDEK PRİMİTİF (Claude Code Standardı) ──
     {"type":"function","function":{"name":"read_file","description":"Belirtilen dosyanın içeriğini okur. Kod veya dosya incelemek için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Okunacak dosya yolu"}},"required":["path"]}}},
     {"type":"function","function":{"name":"write_file","description":"Belirtilen dosyayı oluşturur veya günceller. Kod yazmak veya dosya üretmek için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Yazılacak dosya yolu"},"content":{"type":"string","description":"Dosyaya yazılacak tam içerik"},"overwrite":{"type":"boolean","description":"Var olan dosyanın üzerine yazılsın mı"}},"required":["path","content"]}}},
-    {"type":"function","function":{"name":"run_terminal_command","description":"Terminalde / komut satırında doğrudan komut çalıştırır (git, npm, pip, python, pytest, dir vb.). Bir hata çözdüğünde veya kod yazdıktan sonra test edip doğrulamak için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"},"timeout":{"type":"integer","description":"Zaman aşımı süresi (saniye, varsayılan: 45)"}},"required":["cmd"]}}},
+    {"type":"function","function":{"name":"str_replace_editor","description":"Claude Code standardında dosya içi metin değiştirme. Dosyadaki old_string parçasını new_string ile kesin olarak değiştirir. Tüm dosyayı yeniden yazmak yerine sadece değişecek bloğu değiştirmek için MUTLAKA bunu kullan.","parameters":{"type":"object","properties":{"file_path":{"type":"string","description":"Düzenlenecek dosyanın yolu"},"old_string":{"type":"string","description":"Dosyada aranacak ve değiştirilecek tam metin (bağlam satırlarıyla birlikte)"},"new_string":{"type":"string","description":"old_string yerine gelecek yeni metin"}},"required":["file_path","old_string","new_string"]}}},
+    {"type":"function","function":{"name":"run_terminal_command","description":"Terminalde / komut satırında doğrudan komut çalıştırır (git, npm, pip, python, pytest, dir vb.). Çalışma dizinini korur ('cd' kalıcıdır).","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"},"timeout":{"type":"integer","description":"Zaman aşımı süresi (saniye, varsayılan: 45)"}},"required":["cmd"]}}},
     {"type":"function","function":{"name":"run_terminal","description":"run_terminal_command için kısa yol takma adı. Terminalde komut çalıştırır.","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"}},"required":["cmd"]}}},
     {"type":"function","function":{"name":"search_web","description":"İnternette güncel bilgi, dokümantasyon veya araştırma yapar.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Arama sorgusu"}},"required":["query"]}}},
-    {"type":"function","function":{"name":"generate_pdf","description":"Creates a PDF file from text or markdown. If the user asks for a PDF, document, or report, YOU MUST use this tool immediately. (Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'pdf yap', 'pdf oluştur', 'rapor hazırla', 'belge ver' dediğinde MUTLAKA bu aracı çağır).","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge veya rapor başlığı"},"content":{"type":"string","description":"Markdown formatında belge veya rapor içeriği"}},"required":["title","content"]}}},
-    # PC
-    {"type":"function","function":{"name":"take_screenshot","description":"Ekranın görüntüsünü al","parameters":{"type":"object","properties":{"region":{"type":"string","enum":["auto","active_window","full_screen"],"description":"auto=aktif pencere (hızlı, varsayılan), full_screen=tüm ekran/monitörler"}},"required":[]}}},
+    {"type":"function","function":{"name":"generate_pdf","description":"Creates a beautifully formatted PDF from Markdown. RULES: Write content as clean Markdown with REAL line breaks. DO NOT use literal backslash-n strings. Use ## for sections, - for bullets, **bold**. Turkish chars (ğ,ü,ş,ı,ö,ç) supported. Kullanıcı PDF/rapor/belge istediğinde MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Document title (clean text)"},"content":{"type":"string","description":"Clean Markdown body. Use real line breaks, ## headings, - bullets, **bold**."}},"required":["title","content"]}}},
+    # Computer Use / GUI Agent
+    {"type":"function","function":{"name":"take_screenshot","description":"Ekranın görüntüsünü alır. Masaüstünü ve açık pencereleri görmek için çağır.","parameters":{"type":"object","properties":{"region":{"type":"string","enum":["auto","active_window","full_screen"],"description":"auto=aktif pencere (hızlı, varsayılan), full_screen=tüm ekran"}},"required":[]}}},
+    {"type":"function","function":{"name":"mouse_click","description":"Masaüstünde belirtilen (x, y) piksel koordinatına fare ile tıklar.","parameters":{"type":"object","properties":{"x":{"type":"integer","description":"X koordinatı"},"y":{"type":"integer","description":"Y koordinatı"}},"required":["x","y"]}}},
+    {"type":"function","function":{"name":"keyboard_type","description":"Klavyeden belirtilen metni yazar.","parameters":{"type":"object","properties":{"text":{"type":"string","description":"Yazılacak metin"}},"required":["text"]}}},
+    {"type":"function","function":{"name":"keyboard_press","description":"Klavyeden bir tuşa basar (enter, tab, esc, ctrl+c vb.).","parameters":{"type":"object","properties":{"key":{"type":"string","description":"Basılacak tuş"}},"required":["key"]}}},
     {"type":"function","function":{"name":"open_app","description":"Uygulama aç: chrome/firefox/notepad/spotify/fiverr/upwork/bionluk/cmd","parameters":{"type":"object","properties":{"app_name":{"type":"string"}},"required":["app_name"]}}},
     {"type":"function","function":{"name":"type_text","description":"Klavyeyle metin yaz","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}},
     {"type":"function","function":{"name":"press_key","description":"Tuşa bas: enter/tab/ctrl+c/ctrl+v","parameters":{"type":"object","properties":{"key":{"type":"string"}},"required":["key"]}}},
@@ -777,8 +821,6 @@ TOOLS = [
     {"type":"function","function":{"name":"openclaw_desktop","description":"Masaustu eylemini OpenClaw daemon'una gonder (yoksa Windows yerel yedegine duser). Eylemler: click, type, list_windows, close. NOT: ALES'in kendi list_windows/click_control/set_control_text araclari ayni isi DAHA GUVENILIR yapar - bunu sadece OpenClaw daemon'unun kendi yetenekleri gerekiyorsa kullan.","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["click","type","list_windows","close"]},"window":{"type":"string","description":"Pencere basligi"},"control":{"type":"string","description":"Denetim adi"},"text":{"type":"string"}},"required":["action"]}}},
     {"type":"function","function":{"name":"openclaw_browser","description":"Tarayici eylemini OpenClaw daemon'una gonder (yoksa yerel Playwright yedegine duser). Eylemler: goto (url), search (query). NOT: browse_web/web_search_deep dogrudan ayni isi yapar; bunu sadece daemon'un oturumu/sekmeleri gerekiyorsa kullan.","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["goto","search"]},"url":{"type":"string"},"query":{"type":"string"}},"required":["action"]}}},
     {"type":"function","function":{"name":"openclaw_terminal","description":"Kabuk (shell) komutu calistir ve cikti/hata kodunu getir - orn 'git status', 'dir', 'npm run build'. OpenClaw daemon varsa orada, yoksa yerel subprocess'te calisir. Uzun surecek komutlar icin timeout_s ver.","parameters":{"type":"object","properties":{"command":{"type":"string"},"timeout_s":{"type":"number","description":"Varsayilan 15, en fazla 120"}},"required":["command"]}}},
-    # ── Belge ve PDF Üretimi ──
-    {"type":"function","function":{"name":"generate_pdf","description":"Creates a PDF file from text or markdown. If the user asks for a PDF, document, or report, YOU MUST use this tool. (Markdown metnini veya başlık ve içeriği şık bir PDF belgesine dönüştürür ve indirilebilir dosya üretir. Kullanıcı 'pdf yap', 'pdf oluştur', 'rapor hazırla', 'belge ver' dediğinde MUTLAKA bu aracı çağır).","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Belge veya rapor başlığı"},"content":{"type":"string","description":"Markdown formatında belge veya rapor içeriği"}},"required":["title","content"]}}},
     # ── Claude Code Terminal / Shell Aracı ──
     {"type":"function","function":{"name":"run_terminal_command","description":"Terminalde / komut satırında doğrudan komut çalıştırır (git, npm, pip, python, pytest, dir vb.). Bir hata çözdüğünde veya kod yazdıktan sonra test edip doğrulamak için MUTLAKA bu aracı çağır.","parameters":{"type":"object","properties":{"cmd":{"type":"string","description":"Çalıştırılacak terminal komutu"},"timeout":{"type":"integer","description":"Zaman aşımı süresi (saniye, varsayılan: 45)"}},"required":["cmd"]}}},
 ]
@@ -1107,6 +1149,9 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
     try:
         tools = {
             "take_screenshot": lambda: take_screenshot(args.get("region", "auto")),
+            "mouse_click": lambda: mouse_click(int(args["x"]), int(args["y"])),
+            "keyboard_type": lambda: keyboard_type(args["text"]),
+            "keyboard_press": lambda: keyboard_press(args["key"]),
             "open_app": lambda: open_app(args["app_name"]),
             "type_text": lambda: type_text(args["text"]),
             "press_key": lambda: press_key(args["key"]),
@@ -1176,9 +1221,10 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "start_tunnel": lambda: start_ngrok() if args.get("type","ngrok")=="ngrok" else start_cloudflare_tunnel() if args.get("type")=="cloudflare" else get_local_ip(),
             "get_phone_access": lambda: get_local_ip() + "\n\n" + get_tunnel_status(),
             # Dosya sistemi
-            "read_file": lambda: read_file(args["path"]),
-            "write_file": lambda: write_file(args["path"], args["content"], args.get("overwrite", False)),
-            "edit_file": lambda: edit_file(args["path"], args["old_text"], args["new_text"]),
+            "read_file": lambda: read_file(args.get("path") or args.get("file_path", "")),
+            "write_file": lambda: write_file(args.get("path") or args.get("file_path", ""), args["content"], args.get("overwrite", False)),
+            "edit_file": lambda: edit_file(args.get("path") or args.get("file_path", ""), args.get("old_text") or args.get("old_string", ""), args.get("new_text") or args.get("new_string", "")),
+            "str_replace_editor": lambda: str_replace_editor(args.get("file_path") or args.get("path", ""), args.get("old_string") or args.get("old_text", ""), args.get("new_string") or args.get("new_text", "")),
             "list_directory": lambda: list_directory(args.get("path",".")),
             "create_directory": lambda: create_directory(args["path"]),
             "delete_path": lambda: delete_path(args["path"]),
@@ -1476,16 +1522,15 @@ async def stream_chat_completion(client, model: str, messages: list, tools: list
     def blocking_stream():
         kwargs = dict(model=model, messages=messages, tools=tools,
                       tool_choice="auto", max_tokens=4096, stream=True)
-        if temperature is not None:
-            kwargs["temperature"] = temperature
+        # Varsayılan temperature: kısa & doğrudan yanıtlar için 0.4
+        kwargs["temperature"] = temperature if temperature is not None else 0.4
         stream = client.chat.completions.create(**kwargs)
         return _consume_stream_blocking(stream, on_token)
 
     def blocking_nonstream():
         kwargs = dict(model=model, messages=messages, tools=tools,
                       tool_choice="auto", max_tokens=4096, stream=False)
-        if temperature is not None:
-            kwargs["temperature"] = temperature
+        kwargs["temperature"] = temperature if temperature is not None else 0.4
         resp = client.chat.completions.create(**kwargs)
         msg = resp.choices[0].message
         return msg.content or "", msg.tool_calls
@@ -1744,19 +1789,18 @@ async def _send_tts_stream(text: str, websocket: WebSocket) -> bool:
     return False
 
 # ─── SYSTEM PROMPT (CRISP & AGENTIC - CLAUDE CODE STANDARD) ───
-BASE_SYSTEM = """You are ALES, a senior AI software engineer and autonomous operating system agent.
-Kullanıcın Ali.
+BASE_SYSTEM = """You are ALES, a Claude Code clone. Keep responses extremely brief. DO NOT explain how to do a task. Use your tools to do it directly.
 
-CRITICAL DIRECTIVES:
-1. EXECUTE, DO NOT EXPLAIN: If you have a tool for a task, NEVER explain how to do it in code. YOU MUST call the tool immediately. Do not write tutorial code.
-2. 5 CORE PRIMITIVES:
-   - `read_file(path)`: Inspect file contents.
-   - `write_file(path, content)`: Create or write code/files directly.
-   - `run_terminal_command(cmd)`: Execute shell commands, tests, git, pip, npm. If an error occurs, analyze stderr, edit the code, and re-run.
-   - `search_web(query)`: Search internet for up-to-date documentation and facts.
-   - `generate_pdf(title, content)`: If the user asks for a PDF, document, or report, YOU MUST CALL THIS TOOL IMMEDIATELY! Do not output tutorial code.
-3. CODING AGENT WORKFLOW:
-   Read -> Edit -> Run Test -> Verify. Be concise, direct, and pragmatic.
+RULES:
+1. EXECUTE, NEVER EXPLAIN. If you have a tool for a task, CALL IT IMMEDIATELY. Never write tutorial code or explanations.
+2. BE EXTREMELY BRIEF: Short, direct answers. No filler, no preamble, no unsolicited essays. Max 1-2 paragraphs.
+3. TOOLS:
+   - File edits: ALWAYS use `str_replace_editor` for precise block updates. Use `read_file` to inspect and `write_file` for new files.
+   - Terminal: Use `run_terminal_command` (maintains session working directory). If a command fails, inspect error and auto-correct.
+   - Computer Use / GUI: `take_screenshot` to see screen, `mouse_click(x, y)` to click, `keyboard_type(text)` to type, `keyboard_press(key)` to press keys.
+   - PDF: Call `generate_pdf(title, content)` immediately. Clean Markdown, real line breaks, no literal \\n strings.
+4. WORKFLOW: Read -> Act (str_replace_editor / terminal / GUI) -> Observe -> Verify.
+5. LANGUAGE: Respond in the user's language (Turkish if Turkish, English if English).
 
 Şimdi: {dt}
 Ali profili: {profile}
@@ -2472,6 +2516,18 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
                         _hist_result = token_optimizer.compress_tool_result(result, max_chars=1500)
                     except Exception:
                         _hist_result = result
+                # Terminal/Shell komutu veya işlem hata verdiyse Claude Code tarzı otomatik hata düzeltme yönlendirmesi ekle
+                if name in ("run_terminal_command", "run_terminal") and (
+                    "STDOUT:\n" in str(result) and "[Exit Code: 0]" not in str(result)
+                    or "[Exit Code: " in str(result) and not str(result).startswith("[Exit Code: 0]")
+                    or "STDERR:\n" in str(result)
+                    or "❌" in str(result)
+                ):
+                    _hist_result += (
+                        "\n\n[CLAUDE CODE AUTO-CORRECTION NOTICE]: Komut hata verdi veya sıfır dışı exit code döndü. "
+                        "Hata mesajını ve STDERR çıktısını dikkatle analiz edin. Gerekirse dosyaları `read_file` ve "
+                        "`str_replace_editor` ile inceleyip düzeltin ve komutu tekrar test edin."
+                    )
                 history.append({"role":"tool","tool_call_id":tc.id,"content":_hist_result})
                 # Basarisiz arac cagrilarini bu turun yorungesine isle —
                 # tur sonunda CER'e ve (gerekirse) yansimaya gider.
