@@ -50,6 +50,7 @@ from filesystem import read_file, write_file, str_replace_editor
 import voice
 import browser as browser_module
 import document_generator
+import profile_manager
 
 # ─── APP ───────────────────────────────────────────────────────────
 app = FastAPI(title="ALES", version="5.0")
@@ -803,6 +804,68 @@ async def set_config(request: Request):
     cfg.update(data)
     save_config(cfg)
     return {"ok": True}
+
+# ─── ACCESS CODE PROFILE AUTH (SQLite) ───────────────────────────
+_ENV_KEY_MAP = {
+    "groq_key": "GROQ_API_KEY",
+    "gemini_key": "GEMINI_API_KEY",
+    "openrouter_key": "OPENROUTER_API_KEY",
+    "nvidia_key": "NVIDIA_API_KEY",
+    "openai_key": "OPENAI_API_KEY",
+    "elevenlabs_key": "ELEVENLABS_API_KEY",
+    "cerebras_key": "CEREBRAS_API_KEY",
+    "sambanova_key": "SAMBANOVA_API_KEY",
+}
+
+def _load_keys_into_session(keys: dict):
+    cfg = load_config()
+    for k, val in (keys or {}).items():
+        if val and str(val).strip():
+            clean_val = str(val).strip()
+            cfg[k] = clean_val
+            if k in _ENV_KEY_MAP:
+                os.environ[_ENV_KEY_MAP[k]] = clean_val
+    save_config(cfg)
+
+@app.post("/api/profile/save")
+async def api_profile_save(request: Request):
+    data = await request.json()
+    code = (data.get("access_code") or "").strip()
+    name = (data.get("name") or "").strip()
+    keys = data.get("keys") or data
+    res = profile_manager.save_profile(code, name, keys)
+    if res.get("ok"):
+        _load_keys_into_session(keys)
+    return res
+
+@app.post("/api/profile/load")
+@app.get("/api/profile/load")
+async def api_profile_load(request: Request):
+    if request.method == "POST":
+        body = await request.json()
+        code = (body.get("access_code") or "").strip()
+    else:
+        code = (request.query_params.get("access_code") or "").strip()
+
+    res = profile_manager.load_profile(code)
+    if not res.get("ok"):
+        return JSONResponse(
+            {"success": False, "ok": False, "error": res.get("error", "Geçersiz erişim kodu")},
+            status_code=401
+        )
+    _load_keys_into_session(res.get("keys", {}))
+    # Security: never return API keys to frontend
+    return {
+        "success": True,
+        "ok": True,
+        "message": "Giriş başarılı",
+        "name": res.get("name", ""),
+        "access_code": res.get("access_code", code),
+    }
+
+@app.get("/api/profiles")
+def api_profiles_list():
+    return {"ok": True, "profiles": profile_manager.list_profiles()}
 
 @app.post("/test-key")
 async def test_key(request: Request):

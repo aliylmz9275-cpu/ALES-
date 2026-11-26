@@ -1,237 +1,790 @@
 /* ═══════════════════════════════════════════════════════════════════
-   ALES — index.css
-   Metin/kenar keskinligi ve DPI olcekleme kurallari.
-
-   NOT: Bu dosya YENI. Daha once projede hic .css dosyasi yoktu --
-   App.jsx tum stilini satir ici (inline) nesnelerle veriyor. Bu yuzden
-   "tum px degerlerini rem'e cevir" isteminin gerektirdigi yer burasi
-   DEGIL; asagidaki :root/body ikilisi o donusumu MUMKUN kilar, ama
-   App.jsx'teki ~2000 satir ici olcuyu tek tek cevirmek ayri bir istir
-   (bkz. "62.5% TUZAGI" notu).
-
-   TEMA: Bu dosya HIC renk tanimlamaz. Siyah/gri estetige dokunulmadi.
+   ALES — Design System (Vercel / Claude Dark Aesthetic)
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ─── KOK OLCU: 1rem = 10px ──────────────────────────────────────────
-   62.5% x 16px (tarayici varsayilani) = 10px, yani 1rem = 10px.
-
-   KRITIK — 62.5% TUZAGI: html font-size'i 10px'e dusurmek, kendisine
-   ayrica fontSize verilMEYEN her ogenin 16px'ten 10px'e dusmesi demektir.
-   App.jsx'te metin boyutlari satir ici px olarak verildigi icin onlar
-   etkilenmez, AMA fontSize'i hic belirtilmemis ogeler aniden %37 kucuk
-   cikardi -- arayuzun yari yarisi bozulurdu.
-   Bunu onlemek icin body'ye 1.6rem (= tam 16px) veriyoruz: devralinan
-   taban boyut BUGUNKUYLE BIREBIR AYNI kalir, ama artik rem yazabiliriz.
-   Bu iki kural BIRLIKTE degistirilmeli; birini silmek arayuzu bozar. */
 :root {
-  --bg-main: #121212;
-  --bg-surface: #1E1E24;
-  --text-main: #E4E4E7;
-  --text-secondary: #A1A1AA;
-  --border-color: rgba(255, 255, 255, 0.12);
-  --border-focus: rgba(255, 255, 255, 0.35);
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Inter', sans-serif;
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  box-sizing: border-box;
+  --bg-base: #09090b;
+  --bg-surface: #18181b;
+  --bg-surface-hover: #27272a;
+  --bg-glass: rgba(9, 9, 11, 0.78);
+  --bg-modal: rgba(24, 24, 27, 0.88);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --font-sans: 'Inter', 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 *, *::before, *::after {
-  box-sizing: inherit;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 html, body, #root {
   width: 100%;
   height: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: #121212;
-  color: #E4E4E7;
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Inter', sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: 14px;
-  overflow-x: hidden;
-  max-width: 100vw;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
 }
 
-button, input, select, textarea, label {
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Base Form Controls */
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  border: none;
+  background: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--radius-md);
   font-size: 13px;
-  color: #E4E4E7;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  user-select: none;
 }
 
-/* ─── MOBİL DUYARLILIK (MOBILE RESPONSIVE < 768px) ──────────────── */
-@media (max-width: 768px) {
-  .app-tabs-bar {
-    overflow-x: auto !important;
-    white-space: nowrap !important;
-    padding: 0 8px !important;
-    height: 42px !important;
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: none !important;
-  }
-  .app-tabs-bar::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  .app-tab-btn {
-    padding: 6px 10px !important;
-    font-size: 12px !important;
-    flex-shrink: 0 !important;
-  }
-
-  .chat-message-bubble {
-    max-width: 90% !important;
-    font-size: 14px !important;
-  }
-
-  .responsive-grid-2,
-  .responsive-grid-3,
-  .responsive-grid-4 {
-    grid-template-columns: 1fr !important;
-  }
-
-  .responsive-flex-stack {
-    flex-direction: column !important;
-  }
-
-  .settings-modal-content {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    border-radius: 0 !important;
-    padding: 14px !important;
-  }
-
-  .onboarding-card {
-    width: 95vw !important;
-    max-width: 95vw !important;
-    padding: 20px 16px !important;
-  }
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-/* ─── GORSELLER ──────────────────────────────────────────────────────
-   image-rendering: auto = tarayicinin kaliteli (bilinear/mipmap)
-   olcekleyicisi. "pixelated" BILINCLI OLARAK kullanilmiyor: kesirli DPI
-   (1.25x / 1.5x) altinda pixelated, kenarlari basamak basamak gosterir --
-   sikayet edilen "pikselli" gorunumun ta kendisi.
-   ALES'te su an sadece icon-192/512.png var (manifest + favicon), ama
-   kural ileride eklenecek her gorsel icin de gecerli olsun diye genel. */
-img,
-canvas,
-video,
-picture,
-svg image {
-  image-rendering: auto;
-  -ms-interpolation-mode: bicubic;
+.btn-primary {
+  background: var(--accent);
+  color: #ffffff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
 }
 
-/* ─── SVG ────────────────────────────────────────────────────────────
-   DURUM TESPITI: projede .svg dosyasi YOK; satir ici tek bir <svg> var
-   (App.jsx, kazanc grafigi). O grafik BILINCLI OLARAK
-   preserveAspectRatio="none" kullaniyor: sparkline'in kapsayici
-   genisligini tam doldurmasi gerekiyor. "xMidYMid meet"e cevirmek onu
-   kutu icinde kucultup iki yana bosluk birakirdi -- duzeltme degil,
-   gerileme olurdu. Oradaki asil keskinlik onlemi zaten mevcut:
-   polyline'da vectorEffect="non-scaling-stroke", yani cizgi kalinligi
-   yatay/dusey esnemeden etkilenmiyor.
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
 
-   NOT: preserveAspectRatio bir CSS OZELLIGI DEGIL, SVG NITELIGIDIR --
-   stil dosyasina yazilsa tarayici tarafindan sessizce atilir. Bu yuzden
-   burada yok; yeni eklenecek ikonlarda niteligi ETIKETTE verin
-   (varsayilani zaten "xMidYMid meet"tir, "none" yazmadikca sorun olmaz).
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
 
-   Asagidakiler gercekten ise yarayan, kalitimla cocuklara gecen kurallar. */
-svg {
+.btn-danger {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.24);
+}
+
+.input-field {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── AUTH / LOGIN SCREEN ────────────────────────────────────────── */
+.auth-wrapper {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 55%),
+    var(--bg-base);
+  padding: 20px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 36px 32px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.auth-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+}
+
+.auth-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.auth-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.auth-error {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.auth-link {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.auth-link:hover {
+  color: var(--text-primary);
+}
+
+/* ─── APP SHELL LAYOUT ───────────────────────────────────────────── */
+.app-shell {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+/* Left Sidebar */
+.sidebar {
+  width: 264px;
+  flex-shrink: 0;
+  background: #0c0c0f;
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease, transform 0.2s ease;
+  overflow: hidden;
+}
+
+.sidebar.collapsed {
+  width: 0;
+  border-right: none;
+}
+
+.sidebar-header {
+  height: 56px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: #fff;
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-section {
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 4px 10px 6px;
+}
+
+.nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.sidebar-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-align: left;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.history-item.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.history-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.history-del {
+  opacity: 0;
+  color: var(--text-muted);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.history-item:hover .history-del {
+  opacity: 1;
+}
+.history-del:hover {
+  color: var(--danger);
+}
+
+.sidebar-footer {
+  padding: 12px 10px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.profile-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+
+/* Main Workspace */
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  background: var(--bg-base);
+}
+
+/* Glassmorphic Top Navbar */
+.topbar {
+  height: 56px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* Content Scroll Area */
+.content-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+}
+
+/* ─── CHAT INTERFACE ─────────────────────────────────────────────── */
+.chat-container {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 16px;
+}
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 72px 20px 32px;
+  gap: 12px;
+}
+
+.chat-empty-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.chat-empty-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 440px;
+}
+
+.suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+  width: 100%;
+  max-width: 620px;
+}
+
+.suggestion-card {
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.suggestion-card:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.msg-row {
+  display: flex;
+  width: 100%;
+}
+
+.msg-row.user {
+  justify-content: flex-end;
+}
+
+.msg-row.assistant {
+  justify-content: flex-start;
+}
+
+.msg-bubble-user {
+  max-width: 78%;
+  padding: 12px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px 16px 4px 16px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-assistant {
   max-width: 100%;
-  /* geometricPrecision: kenar yumusatmayi acik tutar. "crispEdges"
-     yumusatmayi KAPATIR ve tam da sikayet edilen basamakli/pikselli
-     gorunumu uretir -- o yuzden kullanilmiyor. */
-  shape-rendering: geometricPrecision;
-  text-rendering: geometricPrecision;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: transparent;
 }
 
-/* Yazi akisi icindeki ikonlar: olcuyu yaziya bagla (sabit px yerine),
-   satira oturt, flex kapsayicida ezilip orani bozulmasin. */
-svg.icon,
-button > svg,
-label > svg {
-  width: 1em;
-  height: 1em;
-  vertical-align: -0.125em;
-  flex: none;
+.assistant-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-/* ─── METIN KATMANLARI ───────────────────────────────────────────────
-   ASIL KESKINLIK KURALI BU. Chromium, bir ogeyi kendi bilesik
-   (composited) katmanina tasidiginda o katmandaki metni LCD alt-piksel
-   yumusatmasindan CIKARIR ve gri tonlamaya duser. Windows'ta bu, "hafif
-   pikselli / bulanik yazi" olarak gorunur -- sikayetin birincil sebebi.
-   Katmana tasiyan seyler: backdrop-filter, filter, will-change,
-   opak olmayan arka planla birlesen 3D donusumler.
-
-   O yuzden App.jsx'te backdrop-filter'lar kaldirildi (oradaki notlara
-   bakin). Burada da genel bir guvenlik agi kuruyoruz: metin tasiyan
-   ogelerde will-change'i kimse kazara acmasin.
-   backdrop-filter'i BURADAN yasaklamiyoruz -- gerektiginde gorsel ustu
-   panellerde mesru; kural, ALTINDA METIN OLAN yerlerde kullanmamak. */
-button,
-input,
-textarea,
-select,
-pre,
-code,
-label {
-  will-change: auto;
+.msg-assistant-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
 }
 
-/* ─── KESIRLI DPI (Windows %125 / %150) ──────────────────────────────
-   NEDEN "boyut nudge"i YOK: Windows %125'te zaten her seyi 1.25 kat
-   buyutuyor ve Chromium bunu devicePixelRatio olarak uyguluyor. Burada
-   font/padding'i bir kez daha buyutmek olcegi CIFT uygular -- arayuz
-   hem sisip tasar hem de kesirli boyutlar yuzunden daha bulanik gorunur.
-   Yani "%125'te yazilari buyut" gibi bir kural sorunu cozmez, buyutur.
-
-   Bunun yerine burada gercekten cozulebilen tek sey var: kesirli
-   cihaz-piksel oraninda tam sayiya oturmayan INCE cizgiler.
-   1px kenarlar Chromium tarafindan cihaz pikseline yuvarlanir
-   (pixel snapping), bu yuzden onlara dokunmuyoruz -- 0.8px gibi
-   degerler yuvarlanmayi bozup cizgiyi SOLUKLASTIRIR.
-   Kaydirma cubugu ise 3px ile 1.25x'te 3.75 cihaz pikseline denk
-   geliyordu; tam sayiya oturan degerlere sabitliyoruz.
-
-   --hairline: App.jsx satir ici kenarlari CSS'ten ezilemez (inline stil
-   kazanir). Ilerideki kullanim icin tek dogru kaynak burada dursun. */
-:root {
-  --hairline: 1px;
+.pdf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  margin: 6px 4px 6px 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+.pdf-pill:hover {
+  background: rgba(59, 130, 246, 0.25);
 }
 
-@media (min-resolution: 1.25dppx) and (max-resolution: 1.49dppx) {
-  ::-webkit-scrollbar {
-    width: 2.4px; /* x1.25 = tam 3 cihaz pikseli */
+.thinking-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.4s infinite ease-in-out;
+}
+
+/* Composer */
+.composer-wrap {
+  padding: 12px 20px 20px;
+  background: linear-gradient(to top, var(--bg-base) 70%, transparent);
+  flex-shrink: 0;
+}
+
+.composer-box {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.composer-box:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.composer-input {
+  flex: 1;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 6px 0;
+}
+.composer-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── PANELS (Terminal, Plans, Memory, Screen) ───────────────────── */
+.panel-container {
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.surface-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.terminal-log {
+  background: #0c0c0f;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ─── GLASSMORPHIC MODALS ────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-modal);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
   }
-}
-
-@media (min-resolution: 1.5dppx) {
-  ::-webkit-scrollbar {
-    width: 2px; /* x1.5 = tam 3 cihaz pikseli */
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+    width: 264px;
   }
-}
-
-/* ─── ERISILEBILIRLIK ────────────────────────────────────────────────
-   Hareket azaltma isteyen kullanicida gecisleri kapat. App.jsx bunu
-   useReducedMotion() ile JS tarafinda da yapiyor; bu kural, o kancanin
-   ulasmadigi CSS animasyonlari (@keyframes ile verilenler) icin. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  .suggestion-grid {
+    grid-template-columns: 1fr;
+  }
+  .msg-bubble-user {
+    max-width: 90%;
   }
 }

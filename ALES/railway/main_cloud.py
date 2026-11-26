@@ -875,7 +875,13 @@ async def cloud_profile_load_api(request: Request):
             code = (request.query_params.get("access_code") or "").strip()
 
         res = profile_manager.load_profile(code)
-        if res.get("ok") and res.get("keys"):
+        if not res.get("ok"):
+            return JSONResponse(
+                {"success": False, "ok": False, "error": res.get("error", "Geçersiz erişim kodu")},
+                status_code=401
+            )
+
+        if res.get("keys"):
             import config_manager as cm
             cfg = cm.load_config()
             env_map = {
@@ -895,9 +901,17 @@ async def cloud_profile_load_api(request: Request):
                     if k in env_map:
                         os.environ[env_map[k]] = val
             cm.save_config(cfg)
-        return res
+
+        # Güvenlik: API anahtarlarını asla frontend'e döndürme
+        return {
+            "success": True,
+            "ok": True,
+            "message": "Giriş başarılı",
+            "name": res.get("name", ""),
+            "access_code": res.get("access_code", code),
+        }
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"success": False, "ok": False, "error": str(e)}
 
 @app.get("/api/profiles")
 async def cloud_profiles_list_api():
