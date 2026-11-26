@@ -69,12 +69,6 @@ TOOL_CATEGORIES = {
         "tools": ["get_worldview", "get_weather", "get_crypto_prices",
                   "get_exchange_rates", "get_news_tr"]
     },
-    "fiverr": {
-        "keywords": ["fiverr", "bionluk", "musteri", "müşteri", "is", "iş", "gorev",
-                      "görev", "siparis", "sipariş", "mesaj", "is yeri"],
-        "tools": ["check_fiverr_messages", "check_bionluk_messages", "open_fiverr_login",
-                  "add_fiverr_task", "get_fiverr_tasks"]
-    },
     "schedule": {
         "keywords": ["zamanla", "her gun", "her gün", "hatirlat", "hatırlat", "saat",
                       "sabah", "aksam", "akşam", "tekrar", "bildirim", "uyar"],
@@ -85,25 +79,14 @@ TOOL_CATEGORIES = {
         "keywords": ["kod", "python", "hesapla", "calistir", "çalıştır", "script",
                       "fonksiyon", "program", "yazılım", "yazilim", "debug", "test",
                       "hata", "duzelt", "düzelt", "refactor"],
-        "tools": ["run_python_code", "run_terminal_command", "read_file", "write_file", "edit_file"]
+        "tools": ["run_python_code", "run_terminal_command", "read_file", "write_file", "str_replace_editor", "edit_file"]
     },
     # ── Kabuk komutu (Terminal / Shell) ──────────────────────────────
     "terminal": {
         "keywords": ["terminal", "komut satiri", "komut satırı", "cmd", "powershell",
                       "kabuk", "shell", "bash", "git ", "npm", "pip install",
                       "derle", "build", "komutu calistir", "komutu çalıştır", "run"],
-        "tools": ["run_terminal_command", "openclaw_terminal"]
-    },
-    # ── OpenClaw koprusu (OPT-IN) ────────────────────────────────────
-    # Bu araclarin yaptigi isi ALES yerel olarak DA yapiyor (list_windows /
-    # click_control / browse_web). Harici daemon kurulu degilse bunlar zaten
-    # o yerel yedeklere duser — yani her mesajda gondermenin bir kazanci yok.
-    # Sadece kullanici acikca OpenClaw'dan soz ederse devreye girer.
-    "openclaw": {
-        "keywords": ["openclaw", "daemon", "harici ajan", "kopru", "koprü",
-                      "bilgisayar kullanimi", "bilgisayar kullanımı"],
-        "tools": ["openclaw_desktop", "openclaw_browser", "openclaw_terminal",
-                  "cua_action"]
+        "tools": ["run_terminal_command"]
     },
     "multi_agent": {
         "keywords": ["derin analiz", "4 ai", "4 yapay", "5 ai", "5 yapay", "tartis", "tartış",
@@ -132,20 +115,11 @@ TOOL_CATEGORIES = {
 }
 
 def _all_categories() -> dict:
-    """TOOL_CATEGORIES + skills/ ve connectors/ tarafindan eklenen dinamik
-    kategoriler. Boylece yeni bir skill veya connector eklendiginde
-    tool_router.py'ye dokunmadan otomatik olarak dogru anahtar kelimelerle
-    devreye girer. Skills/connectors calisma zamaninda acilip
-    kapatilabildigi icin bunlar sabit degil, her cagrida taze okunur."""
+    """TOOL_CATEGORIES dinamik kategoriler."""
     cats = dict(TOOL_CATEGORIES)
     try:
         import skills_engine
         cats.update(skills_engine.get_tool_categories())
-    except Exception:
-        pass
-    try:
-        import connectors
-        cats.update(connectors.get_tool_categories())
     except Exception:
         pass
     return cats

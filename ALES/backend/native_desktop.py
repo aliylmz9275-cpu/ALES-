@@ -840,3 +840,150 @@ def test_desktop_control() -> dict:
         }
     except Exception as e:
         return {"ok": False, "error": f"Test başarısız: {type(e).__name__}: {e}"}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CLAUDE CODE STATEFUL TERMINAL & COMPUTER USE GUI AGENT PRIMITIVES
+# ═══════════════════════════════════════════════════════════════════════
+import subprocess
+import re
+import base64
+from pathlib import Path
+
+# Oturum boyunca çalışma dizinini saklayan state
+_SESSION_CWD: str = str(Path(__file__).resolve().parent.parent)
+
+def get_terminal_cwd() -> str:
+    """Mevcut çalışma dizinini döner."""
+    global _SESSION_CWD
+    if not os.path.exists(_SESSION_CWD):
+        _SESSION_CWD = str(Path(__file__).resolve().parent.parent)
+    return _SESSION_CWD
+
+def set_terminal_cwd(new_dir: str) -> bool:
+    """Çalışma dizinini günceller."""
+    global _SESSION_CWD
+    try:
+        p = Path(new_dir) if os.path.isabs(new_dir) else (Path(_SESSION_CWD) / new_dir)
+        res = p.resolve()
+        if res.exists() and res.is_dir():
+            _SESSION_CWD = str(res)
+            return True
+    except Exception:
+        pass
+    return False
+
+def run_terminal_command(cmd: str, timeout: int = 60) -> str:
+    """Stateful Terminal Runner:
+    - 'cd' komutlarını algılayıp _SESSION_CWD durumunu kalıcı olarak değiştirir.
+    - pip install veya npm install gibi paket yönetim komutlarını o dizinde çalıştırır.
+    - [Exit Code: X], [CWD: Y], STDOUT ve STDERR döner.
+    """
+    global _SESSION_CWD
+    if not cmd or not str(cmd).strip():
+        return "❌ Komut boş olamaz."
+    cmd_str = str(cmd).strip()
+
+    # cd tespiti
+    cd_match = re.match(r"^cd\s+(.+)$", cmd_str, re.IGNORECASE)
+    if cd_match:
+        target = cd_match.group(1).strip().strip('"').strip("'")
+        if set_terminal_cwd(target):
+            return f"✅ Çalışma dizini değiştirildi: {_SESSION_CWD}\n[Exit Code: 0]\n[CWD: {_SESSION_CWD}]"
+        else:
+            return f"❌ Dizin bulunamadı: {target}\n[Exit Code: 1]\n[CWD: {_SESSION_CWD}]"
+
+    curr_cwd = get_terminal_cwd()
+    try:
+        res = subprocess.run(
+            cmd_str,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=curr_cwd
+        )
+        out = (res.stdout or "").strip()
+        err = (res.stderr or "").strip()
+        lines = [f"[Exit Code: {res.returncode}]", f"[CWD: {curr_cwd}]"]
+        if out:
+            lines.append(f"STDOUT:\n{out}")
+        if err:
+            lines.append(f"STDERR:\n{err}")
+        if not out and not err:
+            lines.append("(Komut çıktı vermeden başarıyla tamamlandı)")
+        return "\n\n".join(lines)
+    except subprocess.TimeoutExpired:
+        return f"⏱️ Komut zaman aşımına uğradı ({timeout}s).\n[Exit Code: 124]\n[CWD: {curr_cwd}]"
+    except Exception as e:
+        return f"❌ Terminal hatası: {e}\n[Exit Code: 1]\n[CWD: {curr_cwd}]"
+
+
+# ── Computer Use (GUI Agent: MSS + PyAutoGUI) ───────────────────────────
+def take_screenshot_gui(region: str = "auto") -> dict:
+    """Ekran görüntüsü alır (MSS ile ultra hızlı), base64 JPEG ve dosya yolunu döner."""
+    try:
+        import mss
+        import tempfile
+        import io
+        from PIL import Image
+
+        path = os.path.join(tempfile.gettempdir(), "ales_screen.jpg")
+        with mss.mss() as sct:
+            mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            shot = sct.grab(mon)
+            img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+
+        # Görseli JPEG olarak optimize kaydet
+        img.save(path, format="JPEG", quality=80)
+
+        # Gemini 3.8 Vision için base64 üret
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+        return {
+            "ok": True,
+            "path": path,
+            "width": img.width,
+            "height": img.height,
+            "base64": b64,
+            "message": f"Ekran görüntüsü alındı ({img.width}x{img.height}): {path}"
+        }
+    except Exception as e:
+        return {"ok": False, "error": f"Ekran görüntüsü hatası: {e}"}
+
+def mouse_click_gui(x: int, y: int) -> str:
+    """Ekranda (x, y) koordinatına fare ile tıklar."""
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.click(int(x), int(y))
+        return f"✅ Fare tıklandı: ({x}, {y})"
+    except Exception as e:
+        return f"❌ Fare tıklama hatası ({x}, {y}): {e}"
+
+def keyboard_type_gui(text: str) -> str:
+    """Klavyeden metin yazar."""
+    try:
+        import pyautogui
+        pyautogui.write(str(text), interval=0.01)
+        return f"✅ Metin yazıldı ({len(text)} karakter)"
+    except Exception as e:
+        return f"❌ Klavye yazma hatası: {e}"
+
+def keyboard_press_gui(key: str) -> str:
+    """Klavyeden tuşa basar."""
+    try:
+        import pyautogui
+        k = str(key).strip().lower()
+        if "+" in k:
+            parts = [p.strip() for p in k.split("+")]
+            pyautogui.hotkey(*parts)
+            return f"✅ Kısayol tuşlandı: {k}"
+        else:
+            pyautogui.press(k)
+            return f"✅ Tuşa basıldı: {k}"
+    except Exception as e:
+        return f"❌ Tuş basma hatası ({key}): {e}"
+

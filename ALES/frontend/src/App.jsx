@@ -1730,18 +1730,7 @@ export default function App() {
         {[
           {id:'chat',label:'SOHBET'},
           {id:'terminal',label:'TERMİNAL'},
-          {id:'plans',label:'PLANLAR'},
-          {id:'history',label:'GEÇMİŞ'},
-          {id:'log',label:'LOG'},
-          {id:'worldview',label:'DÜNYA'},
-          {id:'tasks',label:'GÖREV'},
-          ...(!isCloud ? [{id:'live',label:'CANLI İZLE'}] : []),
-          {id:'memory',label:'HAFIZA'},
-          {id:'stats',label:'PANO'},
-          {id:'status',label:'DURUM'},
-          {id:'metrics',label:'METRİKLER'},
           {id:'settings',label:'AYARLAR'},
-          {id:'advanced',label:'GELİŞMİŞ'},
         ].map(t=>(
           <button key={t.id} className="app-tab-btn" style={{padding:'6px 12px',border:tab===t.id?'1px solid rgba(255,255,255,0.45)':'1px solid transparent',background:tab===t.id?'rgba(255,255,255,0.18)':'transparent',color:tab===t.id?'#ffffff':'#A1A1AA',fontFamily:'monospace',fontSize:12,fontWeight:tab===t.id?700:500,letterSpacing:1,cursor:'pointer',borderRadius:6,flexShrink:0,transition:'all .15s'}} onClick={()=>setTab(t.id)}>
             {t.label}

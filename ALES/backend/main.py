@@ -103,15 +103,12 @@ from memory import remember_fact, update_user_profile, get_user_profile, search_
 from browser import fetch_url, get_news_tr, get_weather, get_crypto_prices, get_exchange_rates, google_search, get_worldview
 import voice
 from voice import synthesize, ELEVENLABS_VOICES, DEFAULT_ELEVENLABS_VOICE, EDGE_VOICES, DEFAULT_EDGE_VOICE, OPENAI_VOICES, DEFAULT_OPENAI_VOICE
-import fiverr
-from fiverr import get_fiverr_messages_manual, get_bionluk_messages_manual, open_fiverr_for_login
 from playwright_browser import browse_sync, search_sync
 from vision import analyze_screen_and_act, find_element_on_screen
 from tunnel import start_ngrok, start_cloudflare_tunnel, get_local_ip, get_tunnel_status
 from filesystem import read_file, write_file, edit_file, str_replace_editor, list_directory, create_directory, delete_path, search_files, get_file_info, list_skills, read_skill
 from tool_router import select_relevant_tools, get_routing_info, expand_after_tool_call
 import skills_engine
-import connectors
 from scheduler import add_schedule, remove_schedule, list_schedules, run_scheduler
 from notifier import add_notification_rule, list_notification_rules, remove_notification_rule, send_notification, run_notifier
 from code_runner import run_python_code
@@ -154,16 +151,6 @@ except Exception as _e:
     batch_queue = None
     print(f"[ALES] batch_queue yuklenemedi: {_e}")
 try:
-    import llm_council
-except Exception as _e:
-    llm_council = None
-    print(f"[ALES] llm_council yuklenemedi: {_e}")
-# ── YENI MODULLER (hepsi ayni savunmaci desende) ──────────────────
-# Gerekce yukaridakiyle ayni: bu modullerin HICBIRI zorunlu degildir.
-# Biri import edilemezse ALES yine acilir; sadece o ozellik "kullanilamiyor"
-# der ve UI panelinde nedeni yazar. Tek bir eksik pip paketi (RealtimeTTS,
-# sqlite-vec, uiautomation...) uygulamayi asla dusurmez.
-try:
     import code_act_executor
 except Exception as _e:
     code_act_executor = None
@@ -173,11 +160,7 @@ try:
 except Exception as _e:
     agent_jit = None
     print(f"[ALES] agent_jit yuklenemedi: {_e}")
-try:
-    import predictive
-except Exception as _e:
-    predictive = None
-    print(f"[ALES] predictive yuklenemedi: {_e}")
+predictive = None
 try:
     import audio_streamer
 except Exception as _e:
@@ -227,45 +210,17 @@ try:
     import token_optimizer
 except Exception as _e:
     token_optimizer = None
-try:
-    import mixture_of_agents
-except Exception as _e:
-    mixture_of_agents = None
-try:
-    import contextual_experience_replay as cer_module
-except Exception as _e:
-    cer_module = None
-try:
-    import self_evolution
-    try:
-        from custom_skills import load_all_custom_skills
-        _loaded_skills = load_all_custom_skills()
-        if hasattr(self_evolution, "_evolved_skills"):
-            self_evolution._evolved_skills.update(_loaded_skills)
-    except Exception:
-        pass
-except Exception as _e:
-    self_evolution = None
-try:
-    import mcp_connector
-except Exception as _e:
-    mcp_connector = None
+mixture_of_agents = None
+cer_module = None
+self_evolution = None
+mcp_connector = None
 try:
     import reflection_agent
 except Exception as _e:
     reflection_agent = None
-try:
-    import darwin_godel
-except Exception as _e:
-    darwin_godel = None
-try:
-    import openclaw_bridge
-except Exception as _e:
-    openclaw_bridge = None
-try:
-    import evo_cua_bridge
-except Exception as _e:
-    evo_cua_bridge = None
+darwin_godel = None
+openclaw_bridge = None
+evo_cua_bridge = None
 try:
     import adaptive_timeouts
 except Exception as _e:
@@ -299,60 +254,21 @@ except Exception as _e:
     plan_manager = None
     print(f"[ALES] plan_manager yuklenemedi: {_e}")
 
-CURRENT_TERMINAL_CWD: str = str(Path(__file__).resolve().parent.parent)
+from native_desktop import (
+    run_terminal_command as nd_run_terminal,
+    take_screenshot_gui,
+    mouse_click_gui,
+    keyboard_type_gui,
+    keyboard_press_gui,
+    get_terminal_cwd,
+    set_terminal_cwd
+)
 
 def run_terminal_command(cmd: str, timeout: int = 45) -> str:
-    """Komut satırında (terminal/shell) komut çalıştırır ve çıktısını (stdout/stderr) döner.
-    Oturum boyunca çalışma dizinini (cwd) saklar ('cd' komutları kalıcıdır).
+    """Komut satırında (terminal/shell) komut çalıştırır.
+    Stateful Terminal: Oturum boyunca çalışma dizinini (cwd) saklar ('cd' kalıcıdır).
     """
-    global CURRENT_TERMINAL_CWD
-    if not cmd or not str(cmd).strip():
-        return "❌ Komut boş olamaz."
-    cmd_str = str(cmd).strip()
-    
-    # 'cd <dizin>' komutlarını tespit edip kalıcı çalışma dizinini güncelle
-    cd_match = re.match(r"^cd\s+(.+)$", cmd_str, re.IGNORECASE)
-    if cd_match:
-        target_dir = cd_match.group(1).strip().strip('"').strip("'")
-        try:
-            new_path = Path(CURRENT_TERMINAL_CWD) / target_dir if not os.path.isabs(target_dir) else Path(target_dir)
-            resolved = new_path.resolve()
-            if resolved.exists() and resolved.is_dir():
-                CURRENT_TERMINAL_CWD = str(resolved)
-                return f"✅ Çalışma dizini değiştirildi: {CURRENT_TERMINAL_CWD}"
-            else:
-                return f"❌ Dizin bulunamadı: {target_dir}"
-        except Exception as e:
-            return f"❌ cd hatası: {e}"
-
-    try:
-        import subprocess
-        # Eğer dizin mevcut değilse root_dir'e düş
-        if not os.path.exists(CURRENT_TERMINAL_CWD):
-            CURRENT_TERMINAL_CWD = str(Path(__file__).resolve().parent.parent)
-
-        res = subprocess.run(
-            cmd_str,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=CURRENT_TERMINAL_CWD
-        )
-        out = (res.stdout or "").strip()
-        err = (res.stderr or "").strip()
-        lines = [f"[Exit Code: {res.returncode}]", f"[CWD: {CURRENT_TERMINAL_CWD}]"]
-        if out:
-            lines.append(f"STDOUT:\n{out}")
-        if err:
-            lines.append(f"STDERR:\n{err}")
-        if not out and not err:
-            lines.append("(Komut çıktı vermeden başarıyla tamamlandı)")
-        return "\n\n".join(lines)
-    except subprocess.TimeoutExpired:
-        return f"⏱️ Komut zaman aşımına uğradı ({timeout}s)."
-    except Exception as e:
-        return f"❌ Terminal çalıştırma hatası: {str(e)}"
+    return nd_run_terminal(cmd, timeout=timeout)
 
 from config_manager import (get_mode, set_mode, list_modes, get_mode_config,
                             get_system_prompt, get_key, get_council, set_council,
@@ -417,35 +333,23 @@ def add_short(role: str, content: str, conv_id: str = None):
 
 # ─── PC ARAÇLARI ─────────────────────────────────────────────────
 def take_screenshot(region: str = "auto") -> str:
-    """HIZ: varsayilan olarak (region='auto') sadece AKTIF PENCERE
-    yakalanir - tum ekrani yakalamaktan cok daha kucuk/hizli. Kullanici
-    acikca 'tum ekrani' isterse region='full_screen' ile tam ekran alinir."""
-    try:
-        import tempfile
-        import io
-        from vision import _grab_screen
-        path = os.path.join(tempfile.gettempdir(), "ales_screen.png")
-        img = _grab_screen(region)
-        img.save(path)
-        # LLM için base64 özetini de üret
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=75)
-        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        return f"[Ekran görüntüsü alındı: {img.size[0]}x{img.size[1]}, kaydedildi: {path}]\n[SCREENSHOT_BASE64:data:image/jpeg;base64,{b64[:200]}...({len(b64)} chars)]"
-    except Exception as e:
-        return f"❌ {e}"
+    """Ekran görüntüsü alır (MSS motoru ile ultra hızlı)."""
+    res = take_screenshot_gui(region)
+    if res.get("ok"):
+        return f"[Ekran görüntüsü alındı: {res.get('width')}x{res.get('height')}, kaydedildi: {res.get('path')}]\n[SCREENSHOT_BASE64:data:image/jpeg;base64,{res.get('base64', '')[:200]}...({len(res.get('base64', ''))} chars)]"
+    return f"❌ {res.get('error', 'Ekran görüntüsü alınamadı')}"
 
 def mouse_click(x: int, y: int) -> str:
-    """Ekranda belirtilen (x, y) piksel koordinatına tıklar."""
-    return click_at(x, y)
+    """Ekranda belirtilen (x, y) piksel koordinatına fare ile tıklar."""
+    return mouse_click_gui(x, y)
 
 def keyboard_type(text: str) -> str:
     """Klavyeden belirtilen metni yazar."""
-    return type_text(text)
+    return keyboard_type_gui(text)
 
 def keyboard_press(key: str) -> str:
     """Klavyeden belirtilen tuşa basar (enter, tab, esc, ctrl+c vb.)."""
-    return press_key(key)
+    return keyboard_press_gui(key)
 
 def open_app(app_name: str) -> str:
     """
@@ -6189,11 +6093,7 @@ except Exception as _e:
     security_shield = None
     print(f"[ALES] security_shield yuklenemedi: {_e}")
 
-try:
-    import freelance_bridge
-except Exception as _e:
-    freelance_bridge = None
-    print(f"[ALES] freelance_bridge yuklenemedi: {_e}")
+freelance_bridge = None
 
 try:
     import file_organizer
