@@ -972,11 +972,31 @@ async def serve_pdf(filename: str):
         return FileResponse(str(file_path), media_type="application/pdf", filename=filename)
     return JSONResponse({"error": "Not found"}, status_code=404)
 
+# ─── STATIC FRONTEND (Cloud / Web UI) ───────────────────────────
+from fastapi.staticfiles import StaticFiles
+
+_DIST_CANDIDATES = [
+    Path(__file__).resolve().parent.parent / "dist",
+    Path("/app/dist"),
+    Path("dist"),
+]
+_DIST_DIR = next((d for d in _DIST_CANDIDATES if d.exists() and (d / "index.html").exists()), None)
+
+if _DIST_DIR is not None:
+    _assets_dir = _DIST_DIR / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    @app.get("/")
+    async def serve_spa_root():
+        return FileResponse(str(_DIST_DIR / "index.html"))
+
 # ─── STARTUP ─────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
+    _port = int(os.environ.get("PORT", 8000))
     print(f"[ALES] Claude Code Architecture — 7 Pillars + Extended Tools")
     print(f"[ALES] Tools: {len(TOOLS)} total")
     print(f"[ALES] CWD: {_SESSION_CWD}")
-    print(f"[ALES] Starting on http://0.0.0.0:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
+    print(f"[ALES] Starting on http://0.0.0.0:{_port}")
+    uvicorn.run(app, host="0.0.0.0", port=_port, log_level="warning")
