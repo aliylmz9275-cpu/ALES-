@@ -72,13 +72,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Setup Frontend
+### Setup Frontend
 ```bash
 bash
 cd frontend
 npm install
 npm run build
 ```
-Package as EXE
+### Package as EXE
 ```bash
 npx electron-builder --win portable
