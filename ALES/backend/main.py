@@ -97,8 +97,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import pyautogui
 pyautogui.FAILSAFE = False
 
-from multi_agent import run_discussion_sync
-import multi_agent
 from memory import remember_fact, update_user_profile, get_user_profile, search_memory, get_all_facts, log_event, build_context_prompt
 from browser import fetch_url, get_news_tr, get_weather, get_crypto_prices, get_exchange_rates, google_search, get_worldview
 import voice
@@ -116,13 +114,13 @@ from personas import get_current_persona, set_persona, list_personas
 import conversations as conv_store
 import browser as browser_module
 from config_manager import load_config, save_config, load_memory, save_memory, append_action_log, load_action_log
-# NOT: `import phone_speed_control` buradan KALDIRILDI — main.py onu hicbir
-# yerde kullanmiyordu (olu import). Modul yine yukleniyor, cunku
-# workflow_speed_manager / advisor / adb_engine ondan dogrudan import ediyor;
-# yani davranis birebir ayni, sadece yaniltici satir gitti.
 import workflow_speed_manager
 import model_router
-import semantic_cache
+semantic_cache = None
+speculative_cache = None
+multi_agent = None
+manager_agent = None
+executor_agent = None
 import fast_path
 import credentials
 import browser_profiles
@@ -688,9 +686,6 @@ TOOLS = [
     {"type":"function","function":{"name":"list_skills","description":"Fiverr/Bionluk siparisleri icin mevcut sablon ve rehber dosyalarini listele","parameters":{"type":"object","properties":{},"required":[]}}},
     {"type":"function","function":{"name":"read_skill","description":"Bir siparis sablonunu veya rehberini oku, orn: SIPARIS_REHBERI.md, scraper_static_template.py","parameters":{"type":"object","properties":{"filename":{"type":"string"}},"required":["filename"]}}},
 
-    # Multi-Agent Tartisma
-    {"type":"function","function":{"name":"multi_agent_discuss","description":"4 farkli AI (Groq+Gemini+SambaNova+Cerebras) paralel calisir, konu hakkinda tartisir ve ortak bir sonuc uretir. 'derin analiz', '4 AI ne dusunur', 'tartis', 'farkli perspektifler' gibi isteklerde kullan.","parameters":{"type":"object","properties":{"topic":{"type":"string","description":"Tartisma konusu veya soru"}},"required":["topic"]}}},
-    {"type":"function","function":{"name":"manage_goal","description":"Karmaşık ve çok adımlı görevleri Manager-Executor mimarisiyle alt adımlara böler, öğrenilen deneyim kurallarını uygular, her adımı yürütüp doğrular ve sonuç raporlar. 'şunu adım adım yap', 'görevi planla ve yürüt' gibi hedeflerde kullan.","parameters":{"type":"object","properties":{"goal":{"type":"string","description":"Yürütülecek hedef veya görev"}},"required":["goal"]}}},
     # Persona
     {"type":"function","function":{"name":"set_persona","description":"ALES modunu değiştir: default/is/ogrenme/dinlenme/gece/siparis/gorev","parameters":{"type":"object","properties":{"persona_key":{"type":"string","enum":["default","is","ogrenme","dinlenme","gece","siparis","gorev"]}},"required":["persona_key"]}}},
     {"type":"function","function":{"name":"list_personas","description":"Kullanılabilir modları listele","parameters":{"type":"object","properties":{},"required":[]}}},
@@ -1137,9 +1132,6 @@ def execute_tool(name: str, args: dict, progress_cb=None) -> str:
             "list_skills": lambda: list_skills(),
             "read_skill": lambda: read_skill(args["filename"]),
             "list_personas": lambda: list_personas(),
-            # Multi-Agent / Manager-Executor
-            "multi_agent_discuss": lambda: run_discussion_sync(args["topic"], progress_cb),
-            "manage_goal": lambda: _run_manager_goal_sync(args.get("goal") or args.get("topic") or "", progress_cb),
             # Skills (takilabilir yetenekler - Claude'daki skill mantigi)
             "list_installed_skills": lambda: skills_engine.list_skills_text(),
             # Connectors (harici servisler)
@@ -1997,146 +1989,6 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
                 print(f"[JIT] blok basarisiz oldu, AI'ya duşuluyor: "
                       f"{str(_jr.get('error'))[:120]}")
 
-    # ── 2) ANLAMSAL CACHE ────────────────────────────────────────────
-    # Yakin-tekrar bilgi sorulari (aksiyon/zamana-duyarli DEGIL) daha once
-    # yanitlandiysa LLM'e hic gitmeden ayni cevap dondurulur. Namespace =
-    # mod (task-modu cevabi heavy-moda sizmaz). is_cacheable kapisi komut/
-    # volatil sorgulari zaten reddeder (iceride karar verilir).
-    try:
-        cached = semantic_cache.lookup(user_message, namespace=mode)
-    except Exception:
-        cached = None
-    if cached and cached.get("answer"):
-        final = cached["answer"]
-        add_short("user", user_message, conv_id)
-        add_short("assistant", final, conv_id)
-        print(f"[CACHE] HIT (benzerlik={cached.get('similarity')}, yas={cached.get('age_s')}s)")
-        await websocket.send_json({"type":"message","content":final})
-        asyncio.create_task(send_tts_audio(final, websocket))
-        return
-
-    # ── 2.5) LLM MECLISI (Council) ───────────────────────────────────
-    # Heavy/Council modunda ya da global anahtar aciksa: ayni soru 6 modele
-    # kadar AYNI ANDA sorulur, yanitlar anonimlestirilip hakem modele
-    # degerlendirtilir, tek cevap sentezlenir.
-    # KAPILAR: (a) Fast Path zaten calistiysa buraya hic gelinmez;
-    # (b) arac gerektiren istekler meclise GITMEZ — meclis uyeleri arac
-    # cagiramaz, "ekrani ac" gibi bir komut meclise giderse sadece metin
-    # doner ve is YAPILMAZ. Bu yuzden sadece is_cacheable()==True olan
-    # (aksiyon/volatil olmayan) bilgi sorulari meclise gider.
-    if llm_council and mode_cfg.get("council"):
-        try:
-            council_ok, _reason = semantic_cache.is_cacheable(user_message)
-        except Exception:
-            council_ok = False
-        if council_ok:
-            await websocket.send_json({"type": "tool_use", "tool": "council",
-                                       "args": {"strategy": mode_cfg.get("council_strategy")}})
-            try:
-                cfg_c = get_council()
-                res = await llm_council.council(
-                    user_message,
-                    strategy=mode_cfg.get("council_strategy") or cfg_c["strategy"],
-                    timeout_s=cfg_c["timeout_s"],
-                    judge_timeout_s=cfg_c["judge_timeout_s"],
-                    use_cache=cfg_c["cache"],
-                    # KALICI SISTEM PROMPTU (LUBV): meclis yolu asagidaki
-                    # enjeksiyondan ONCE return ettigi icin, yonergenin meclis
-                    # yanitlarina islemesinin tek yolu onu buradan gecirmektir.
-                    # Aksi halde "her konusmaya enjekte edilir" sozu Meclis/Heavy
-                    # modunda SESSIZCE bozulurdu.
-                    system_extra=get_system_prompt(),
-                )
-            except Exception as e:
-                print(f"[COUNCIL] beklenmeyen hata, normal zincire duşuluyor: {e}")
-                res = {"ok": False, "error": str(e)}
-
-            if res.get("ok") and (res.get("answer") or "").strip():
-                final = res["answer"]
-                add_short("user", user_message, conv_id)
-                add_short("assistant", final, conv_id)
-                print(f"[COUNCIL] {res.get('responded')}/{res.get('asked')} uye · "
-                      f"{res.get('strategy')} · hakem={res.get('judge')} · "
-                      f"{res.get('elapsed')}s")
-                log_event(f"Meclis: {user_message[:40]}")
-                await websocket.send_json({
-                    "type": "tool_result", "tool": "council",
-                    "result": (f"{res.get('responded', 0)}/{res.get('asked', 0)} model yanitladi "
-                               f"· {res.get('strategy')}"
-                               + (" · onbellek" if res.get("cached") else ""))})
-                await websocket.send_json({"type": "council", "summary": {
-                    "strategy": res.get("strategy"), "judge": res.get("judge"),
-                    "winner": res.get("winner"), "members": res.get("members", []),
-                    "responded": res.get("responded"), "asked": res.get("asked"),
-                    "elapsed": res.get("elapsed"), "cached": res.get("cached"),
-                    "degraded": res.get("degraded")}})
-                await websocket.send_json({"type": "message", "content": final})
-                asyncio.create_task(send_tts_audio(final, websocket))
-                return
-            # Meclis basarisiz -> sessizce NORMAL zincire duş (asla patlama).
-            print(f"[COUNCIL] atlandi: {res.get('error')}")
-            await websocket.send_json({
-                "type": "tool_result", "tool": "council",
-                "result": f"meclis atlandi ({res.get('error')}) — normal zincire duşuldu"})
-
-    # ── 2.6) AJAN KARISIMI (MoA / DMoA) ─────────────────────────────
-    # "Mixture-of-Agents" (2024) + Dynamic MoA: ayni soru birden fazla
-    # KATMANA onerici olarak sorulur, yanitlar anonimlestirilir, hakem
-    # katman en iyi yonleri sentezler. DMoA once ceşitliligi olcer:
-    # modeller hemfikirse (dusuk ceşitlilik) hakem adimi ATLANIR ve en
-    # hizli yanit doner — yani "coklu model" her zaman yavas degil.
-    #
-    # NEDEN COUNCIL'DEN AYRI: llm_council farkli SAGLAYICILARI oylatir ve
-    # kendi onbellegi/stratejileri var; MoA ayni router katmanlarini
-    # onerici/hakem rolune sokar. Ikisini birlikte kosmak ayni isi iki kez
-    # yapmak olurdu — bu yuzden council ACIKSA MoA devreye girmez.
-    #
-    # KAPI: council ile AYNI gerekce — onericiler ARAC CAGIRAMAZ. "Ekrani
-    # ac" gibi bir eylem istegi MoA'ya giderse guzel bir metin doner ama
-    # is YAPILMAZ. Bu yuzden yalnizca is_cacheable()==True olan (aksiyon
-    # icermeyen, volatil olmayan) bilgi sorulari buraya girer.
-    if (mode_cfg.get("multi") and not mode_cfg.get("council")
-            and _mod_on("moa", mixture_of_agents)):
-        try:
-            _moa_ok, _ = semantic_cache.is_cacheable(user_message)
-        except Exception:
-            _moa_ok = False
-        if _moa_ok:
-            await websocket.send_json({"type": "tool_use", "tool": "moa",
-                                       "args": {"strategy": "dmoa"}})
-            try:
-                # LUBV/kalici sistem promptu MoA yolundan da GECMEK ZORUNDA:
-                # bu yol da normal zincire ugramadan return edebiliyor.
-                _moa = await mixture_of_agents.run_dmoa(
-                    user_message, system=get_system_prompt() or "")
-            except Exception as e:
-                print(f"[MoA] beklenmeyen hata, normal zincire duşuluyor: {e}")
-                _moa = {"ok": False, "error": str(e)}
-
-            if _moa.get("ok") and (_moa.get("content") or "").strip():
-                final = _moa["content"]
-                add_short("user", user_message, conv_id)
-                add_short("assistant", final, conv_id)
-                print(f"[MoA] {_moa.get('mode')} · {_moa.get('proposers_count')} onerici "
-                      f"· ceşitlilik={_moa.get('diversity_score')} · {_moa.get('elapsed')}s")
-                log_event(f"MoA: {user_message[:40]}")
-                await websocket.send_json({
-                    "type": "tool_result", "tool": "moa",
-                    "result": (f"{_moa.get('proposers_count', 0)} onerici · "
-                               f"{_moa.get('mode')}")})
-                await websocket.send_json({"type": "moa", "summary": {
-                    "mode": _moa.get("mode"),
-                    "proposers_count": _moa.get("proposers_count"),
-                    "diversity_score": _moa.get("diversity_score"),
-                    "elapsed": _moa.get("elapsed")}})
-                await websocket.send_json({"type": "message", "content": final})
-                asyncio.create_task(send_tts_audio(final, websocket))
-                return
-            print(f"[MoA] atlandi: {_moa.get('error')}")
-            await websocket.send_json({
-                "type": "tool_result", "tool": "moa",
-                "result": f"MoA atlandi ({_moa.get('error')}) — normal zincire duşuldu"})
-
     # ── 3) GECMIS + SISTEM PROMPTU ──────────────────────────────────
     if conv_id:
         history = conv_store.get_history_for_model(conv_id, limit=20)
@@ -2269,29 +2121,7 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
                                ", ".join(p["field"] for p in probs)
                 except Exception:
                     pass
-                for name, caller in (("Gemini", multi_agent._call_gemini), ("SambaNova", multi_agent._call_sambanova), ("OpenRouter", multi_agent._call_openrouter)):
-                    ok, text = await caller(convo_text, system)
-                    if ok:
-                        final = text + f"\n\n_(⚠️ Ana model zinciri erişilemedi, {name} ile yanıt verildi - bu turda araç/otomasyon kullanılamadı{hint})_"
-                        add_short("assistant", final, conv_id)
-                        await websocket.send_json({"type":"message","content":final})
-                        asyncio.create_task(send_tts_audio(final, websocket))
-                        return
                 await websocket.send_json({"type":"error","content":f"API Hatası: {e}{hint}"})
-                # Zincir tamamen duştu: bunu da OGREN. CER basarisiz
-                # yorungeyi arsivler, yansima kok nedeni cikarir. Boylece
-                # ayni model/butce hatasi tekrarlarsa bir sonraki turda
-                # stratejik kural olarak promptta hazir olur.
-                _record_turn_evolution(user_message, turn_calls,
-                                       turn_errors + [{"tool": "router",
-                                                       "args": {"mode": mode},
-                                                       "error": str(e)[:300]}],
-                                       "", mode, ok=False,
-                                       scaffold_id=_scaffold_id)
-                asyncio.create_task(_reflect_on_turn(
-                    user_message,
-                    [{"tool": "router", "args": {"mode": mode}, "error": str(e)[:300]}],
-                    mode))
                 return
         except Exception as e:
             print(f"[AGENT] beklenmeyen stream hatasi: {e}")
@@ -2520,13 +2350,6 @@ async def run_agent(user_message: str, websocket: WebSocket, conv_id: str = None
                     print(f"[PDF] Otomatik fallback hatası: {_pdf_err}")
             add_short("assistant", final, conv_id)
             log_event(f"Konuşma: {user_message[:50]}")
-            # ANLAMSAL CACHE'E YAZ — sadece cache'lenebilir sorular saklanir
-            # (komut/aksiyon ve zamana-duyarli sorgular is_cacheable icinde
-            # reddedilir). Namespace = aktif mod.
-            try:
-                semantic_cache.store(user_message, final, namespace=mode)
-            except Exception:
-                pass
 
             # ── AGENT JIT'E YAZ (derlenmis blogu sakla) ──────────────
             # Tur duz metinle bitti = model isi bitmis sayiyor. Aday kod

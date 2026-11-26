@@ -1809,7 +1809,6 @@ export default function App() {
         </div>}
 
         {tab==='terminal' && <TerminalPanel />}
-        {tab==='plans' && <PlansPanel />}
 
         {tab==='history' && <div style={{height:'100%',overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:8}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
