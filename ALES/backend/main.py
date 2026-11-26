@@ -1,8 +1,8 @@
 """
-main.py — ALES Claude Code Architecture (7 Pillars)
+main.py — ALES Claude Code Architecture (7 Pillars) + Extended Tools
 
 Pillar 1: ReAct Agent Loop (max 15 turns, auto-correction)
-Pillar 2: 6 Core Tools (read_file, write_file, edit_file, run_bash, grep_search, glob_search)
+Pillar 2: 13 Tools (6 core + search_web + memory + plans + vision/GUI + PDF)
 Pillar 3: Permission System (destructive command gate)
 Pillar 4: Auto-Compact (token management)
 Pillar 5: Project Memory (ALES.md)
@@ -10,6 +10,7 @@ Pillar 6: WebSocket events for TUI
 Pillar 7: Pure coding harness — no bloat
 """
 import asyncio, json, os, re, subprocess, sys, time, traceback, glob as glob_mod
+import base64, uuid
 from datetime import datetime
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -41,7 +42,7 @@ def _boot_streams():
 _boot_streams()
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config_manager import load_config, save_config, get_key
@@ -51,16 +52,22 @@ import browser as browser_module
 import document_generator
 
 # ─── APP ───────────────────────────────────────────────────────────
-app = FastAPI(title="ALES", version="4.0")
+app = FastAPI(title="ALES", version="5.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ─── CONSTANTS ─────────────────────────────────────────────────────
 MAX_AGENT_TURNS = 15
 EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
+# ─── DATA DIRS ─────────────────────────────────────────────────────
+_APPDATA = Path(os.environ.get("APPDATA", Path.home())) / "ALES"
+_APPDATA.mkdir(parents=True, exist_ok=True)
+_PLANS_FILE = _APPDATA / "plans.json"
+_MEMORY_DIR = _APPDATA / "memory"
+_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
 # ─── PILLAR 5: PROJECT MEMORY (ALES.md) ───────────────────────────
 def load_ales_md(cwd: str = None) -> str:
-    """Look for ALES.md in the working directory and inject into system prompt."""
     search_dirs = [cwd] if cwd else []
     search_dirs.extend([os.getcwd(), str(Path.home())])
     for d in search_dirs:
@@ -92,6 +99,13 @@ TOOLS AVAILABLE:
 - grep_search(query, include_pattern): Search for text in files
 - glob_search(pattern): Find files matching a glob pattern
 - generate_pdf(title, content): Generate a PDF document
+- search_web(query): Search the web with DuckDuckGo
+- remember_fact(text, category): Save important information to long-term memory
+- recall_memory(query): Retrieve relevant memories
+- create_plan(goal, steps): Create a task plan with steps
+- take_screenshot(): Capture the current screen (returns base64 image)
+- mouse_click(x, y): Click at screen coordinates
+- keyboard_type(text): Type text via keyboard
 
 You speak Turkish when the user speaks Turkish, English when they speak English."""
 
@@ -110,32 +124,24 @@ def _load_permissions() -> dict:
     return _permissions_cache
 
 def is_destructive(command: str) -> bool:
-    """Check if a command matches destructive patterns."""
     perms = _load_permissions()
     cmd_lower = command.lower().strip()
-    # Always-allow shortcuts
     for safe in perms.get("always_allow", []):
         if cmd_lower.startswith(safe.lower()):
             return False
-    # Destructive check
     for pattern in perms.get("destructive_patterns", []):
         if pattern.lower() in cmd_lower:
             return True
     return False
 
-# Active permission requests: {request_id: asyncio.Event}
 _permission_requests: dict = {}
 _permission_results: dict = {}
 
-# ─── PILLAR 2: 6 CORE TOOLS ──────────────────────────────────────
-# Stateful terminal CWD
+# ─── PILLAR 2: CORE TOOLS ────────────────────────────────────────
 _SESSION_CWD = os.getcwd()
 
 def run_bash(command: str, cwd: str = None, timeout: int = 60) -> dict:
-    """Execute a bash/shell command. Returns {exit_code, stdout, stderr}."""
     global _SESSION_CWD
-    
-    # Handle cd commands to persist CWD
     cd_match = re.match(r'^cd\s+(.+)$', command.strip())
     if cd_match:
         target = cd_match.group(1).strip().strip('"').strip("'")
@@ -148,7 +154,6 @@ def run_bash(command: str, cwd: str = None, timeout: int = 60) -> dict:
             return {"exit_code": 0, "stdout": f"Changed directory to: {_SESSION_CWD}", "stderr": ""}
         else:
             return {"exit_code": 1, "stdout": "", "stderr": f"Directory not found: {target}"}
-    
     work_dir = cwd or _SESSION_CWD
     try:
         result = subprocess.run(
@@ -167,7 +172,6 @@ def run_bash(command: str, cwd: str = None, timeout: int = 60) -> dict:
         return {"exit_code": -1, "stdout": "", "stderr": str(e)}
 
 def grep_search(query: str, include_pattern: str = None, cwd: str = None) -> str:
-    """Search for text in files using findstr/grep."""
     work_dir = cwd or _SESSION_CWD
     try:
         if os.name == 'nt':
@@ -180,7 +184,6 @@ def grep_search(query: str, include_pattern: str = None, cwd: str = None) -> str
             cmd = f'grep -rn --include="*.py" --include="*.js" --include="*.jsx" -i "{query}" .'
             if include_pattern:
                 cmd = f'grep -rn --include="{include_pattern}" -i "{query}" .'
-        
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                               timeout=15, cwd=work_dir,
                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
@@ -193,13 +196,11 @@ def grep_search(query: str, include_pattern: str = None, cwd: str = None) -> str
         return f"Search error: {e}"
 
 def glob_search(pattern: str, cwd: str = None) -> str:
-    """Find files matching a glob pattern."""
     work_dir = cwd or _SESSION_CWD
     try:
         matches = glob_mod.glob(os.path.join(work_dir, pattern), recursive=True)
         if not matches:
             return f"No files matching '{pattern}'"
-        # Show relative paths
         results = []
         for m in sorted(matches)[:100]:
             try:
@@ -216,20 +217,238 @@ def glob_search(pattern: str, cwd: str = None) -> str:
     except Exception as e:
         return f"Glob error: {e}"
 
-# ─── TOOL SCHEMAS (for LLM function calling) ─────────────────────
+# ─── SEARCH WEB TOOL ──────────────────────────────────────────────
+def search_web(query: str) -> str:
+    """Web search using DuckDuckGo (no API key needed)."""
+    return browser_module.google_search(query)
+
+# ─── MEMORY/RAG TOOLS (ChromaDB) ─────────────────────────────────
+_chroma_client = None
+_chroma_collection = None
+
+def _get_memory_collection():
+    global _chroma_client, _chroma_collection
+    if _chroma_collection is not None:
+        return _chroma_collection
+    try:
+        import chromadb
+        _chroma_client = chromadb.PersistentClient(path=str(_MEMORY_DIR))
+        _chroma_collection = _chroma_client.get_or_create_collection(
+            name="ales_memory",
+            metadata={"hnsw:space": "cosine"}
+        )
+        return _chroma_collection
+    except Exception as e:
+        print(f"[MEMORY] ChromaDB init error: {e}")
+        return None
+
+def remember_fact(text: str, category: str = "general") -> str:
+    """Save a fact to long-term ChromaDB vector memory."""
+    collection = _get_memory_collection()
+    if collection is None:
+        return "❌ Memory system unavailable (ChromaDB not initialized)."
+    try:
+        doc_id = f"mem_{uuid.uuid4().hex[:12]}"
+        metadata = {
+            "category": category,
+            "timestamp": datetime.now().isoformat(),
+        }
+        collection.add(
+            documents=[text],
+            metadatas=[metadata],
+            ids=[doc_id]
+        )
+        count = collection.count()
+        return f"✅ Fact saved to memory (ID: {doc_id}). Total memories: {count}"
+    except Exception as e:
+        return f"❌ Memory save error: {e}"
+
+def recall_memory(query: str, n_results: int = 5) -> str:
+    """Query ChromaDB vector memory for relevant facts."""
+    collection = _get_memory_collection()
+    if collection is None:
+        return "❌ Memory system unavailable."
+    try:
+        if collection.count() == 0:
+            return "Memory is empty. No facts stored yet."
+        results = collection.query(
+            query_texts=[query],
+            n_results=min(n_results, collection.count())
+        )
+        if not results["documents"] or not results["documents"][0]:
+            return f"No relevant memories found for: '{query}'"
+        lines = [f"Found {len(results['documents'][0])} relevant memories:"]
+        for i, (doc, meta) in enumerate(zip(results["documents"][0], results["metadatas"][0])):
+            cat = meta.get("category", "general")
+            ts = meta.get("timestamp", "?")[:19]
+            lines.append(f"  [{i+1}] [{cat}] ({ts}) {doc}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"❌ Memory recall error: {e}"
+
+# ─── PLANS TOOLS ──────────────────────────────────────────────────
+def _load_plans() -> list:
+    try:
+        return json.loads(_PLANS_FILE.read_text(encoding="utf-8"))
+    except:
+        return []
+
+def _save_plans(plans: list):
+    _PLANS_FILE.write_text(json.dumps(plans, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def create_plan(goal: str, steps: list = None) -> str:
+    """Create a task plan with goal and steps."""
+    plans = _load_plans()
+    plan_id = f"plan_{uuid.uuid4().hex[:8]}"
+    if not steps:
+        steps = [{"title": goal, "status": "pending"}]
+    else:
+        steps = [{"title": s if isinstance(s, str) else s.get("title", str(s)), "status": "pending"} for s in steps]
+    plan = {
+        "id": plan_id,
+        "goal": goal,
+        "steps": steps,
+        "status": "pending",
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat(),
+    }
+    plans.append(plan)
+    _save_plans(plans)
+    step_list = "\n".join([f"  [{i+1}] {s['title']}" for i, s in enumerate(steps)])
+    return f"✅ Plan created: {plan_id}\nGoal: {goal}\nSteps:\n{step_list}"
+
+def update_plan_step(plan_id: str, step_index: int, status: str, note: str = "") -> str:
+    """Update a plan step status (pending/running/done/failed)."""
+    plans = _load_plans()
+    for plan in plans:
+        if plan["id"] == plan_id:
+            if 0 <= step_index < len(plan["steps"]):
+                plan["steps"][step_index]["status"] = status
+                if note:
+                    plan["steps"][step_index]["note"] = note
+                plan["updated_at"] = datetime.now().isoformat()
+                # Update overall plan status
+                statuses = [s["status"] for s in plan["steps"]]
+                if all(s == "done" for s in statuses):
+                    plan["status"] = "done"
+                elif any(s == "running" for s in statuses):
+                    plan["status"] = "running"
+                elif any(s == "failed" for s in statuses):
+                    plan["status"] = "failed"
+                _save_plans(plans)
+                return f"✅ Plan {plan_id} step {step_index+1} → {status}"
+            return f"❌ Invalid step index: {step_index}"
+    return f"❌ Plan not found: {plan_id}"
+
+# ─── VISION/GUI TOOLS ─────────────────────────────────────────────
+def take_screenshot() -> str:
+    """Capture screen and return base64 PNG."""
+    try:
+        import mss
+        with mss.mss() as sct:
+            monitor = sct.monitors[1]  # Primary monitor
+            img = sct.grab(monitor)
+            # Convert to PNG bytes
+            from PIL import Image
+            import io
+            pil_img = Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
+            # Resize to max 1280px wide to keep token usage low
+            max_w = 1280
+            if pil_img.width > max_w:
+                ratio = max_w / pil_img.width
+                pil_img = pil_img.resize((max_w, int(pil_img.height * ratio)), Image.LANCZOS)
+            buf = io.BytesIO()
+            pil_img.save(buf, format="PNG", optimize=True)
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            # Also save to static for the UI
+            ss_dir = Path(__file__).parent / "static" / "screenshots"
+            ss_dir.mkdir(parents=True, exist_ok=True)
+            ss_path = ss_dir / f"screen_{int(time.time())}.png"
+            pil_img.save(str(ss_path), format="PNG")
+            return json.dumps({
+                "success": True,
+                "base64": b64[:100] + "...(truncated for LLM)",
+                "file": str(ss_path),
+                "url": f"/static/screenshots/{ss_path.name}",
+                "resolution": f"{pil_img.width}x{pil_img.height}"
+            })
+    except Exception as e:
+        return f"❌ Screenshot error: {e}"
+
+def _take_screenshot_raw_b64() -> str:
+    """Return full base64 for internal use (vision API)."""
+    try:
+        import mss
+        from PIL import Image
+        import io
+        with mss.mss() as sct:
+            monitor = sct.monitors[1]
+            img = sct.grab(monitor)
+            pil_img = Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
+            max_w = 1280
+            if pil_img.width > max_w:
+                ratio = max_w / pil_img.width
+                pil_img = pil_img.resize((max_w, int(pil_img.height * ratio)), Image.LANCZOS)
+            buf = io.BytesIO()
+            pil_img.save(buf, format="PNG", optimize=True)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+    except:
+        return ""
+
+def mouse_click(x: int, y: int) -> str:
+    """Click at screen coordinates."""
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.click(x, y)
+        return f"✅ Clicked at ({x}, {y})"
+    except Exception as e:
+        return f"❌ Click error: {e}"
+
+def keyboard_type(text: str) -> str:
+    """Type text via keyboard (uses clipboard for Unicode support)."""
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        # Use clipboard method for Turkish chars
+        import subprocess as sp
+        sp.run(['clip.exe'], input=text.encode('utf-16-le'), check=True,
+               creationflags=getattr(sp, 'CREATE_NO_WINDOW', 0))
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.1)
+        return f"✅ Typed: {text[:50]}{'...' if len(text)>50 else ''}"
+    except Exception as e:
+        # Fallback to direct typing
+        try:
+            import pyautogui
+            pyautogui.typewrite(text, interval=0.02)
+            return f"✅ Typed (fallback): {text[:50]}"
+        except Exception as e2:
+            return f"❌ Type error: {e2}"
+
+# ─── TOOL SCHEMAS ─────────────────────────────────────────────────
 TOOLS = [
+    # 6 Core Claude Code tools
     {"type":"function","function":{"name":"read_file","description":"Read the contents of a file at the given path.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path to read"}},"required":["path"]}}},
     {"type":"function","function":{"name":"write_file","description":"Create or overwrite a file with the given content.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path to write"},"content":{"type":"string","description":"Full file content to write"}},"required":["path","content"]}}},
     {"type":"function","function":{"name":"edit_file","description":"Replace an EXACT string in a file. The old_string MUST appear exactly once. Use for precise edits without rewriting the whole file.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"File path to edit"},"old_string":{"type":"string","description":"Exact text to find (must appear exactly once)"},"new_string":{"type":"string","description":"Replacement text"}},"required":["path","old_string","new_string"]}}},
     {"type":"function","function":{"name":"run_bash","description":"Run a shell/terminal command. Working directory persists across calls. Use for: git, npm, pip, python, build, test, etc.","parameters":{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute"},"timeout":{"type":"integer","description":"Timeout in seconds (default 60)"}},"required":["command"]}}},
     {"type":"function","function":{"name":"grep_search","description":"Search for text across files in the project (like grep/ripgrep).","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Text to search for"},"include_pattern":{"type":"string","description":"File pattern filter, e.g. *.py or *.js"}},"required":["query"]}}},
     {"type":"function","function":{"name":"glob_search","description":"Find files matching a glob pattern (e.g. **/*.py, src/**/*.jsx).","parameters":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern, e.g. **/*.py"}},"required":["pattern"]}}},
+    # Extended tools
     {"type":"function","function":{"name":"generate_pdf","description":"Generate a beautifully formatted PDF. Write content as clean Markdown. Turkish chars supported.","parameters":{"type":"object","properties":{"title":{"type":"string","description":"Document title"},"content":{"type":"string","description":"Markdown content for the PDF body"}},"required":["title","content"]}}},
+    {"type":"function","function":{"name":"search_web","description":"Search the web for information. Returns DuckDuckGo results.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search query"}},"required":["query"]}}},
+    {"type":"function","function":{"name":"remember_fact","description":"Save important information to long-term vector memory (ChromaDB). Use to store user preferences, project facts, decisions, etc.","parameters":{"type":"object","properties":{"text":{"type":"string","description":"The fact or information to remember"},"category":{"type":"string","description":"Category: general, user, project, decision, code"}},"required":["text"]}}},
+    {"type":"function","function":{"name":"recall_memory","description":"Retrieve relevant facts from long-term memory. Semantic search.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"What to search for in memory"}},"required":["query"]}}},
+    {"type":"function","function":{"name":"create_plan","description":"Create a task plan with a goal and ordered steps. Each step will be tracked (pending/running/done/failed).","parameters":{"type":"object","properties":{"goal":{"type":"string","description":"The overall goal of the plan"},"steps":{"type":"array","items":{"type":"string"},"description":"List of step descriptions in order"}},"required":["goal","steps"]}}},
+    {"type":"function","function":{"name":"update_plan_step","description":"Update a plan step's status. Use after completing or failing a step.","parameters":{"type":"object","properties":{"plan_id":{"type":"string","description":"Plan ID (e.g. plan_abc12345)"},"step_index":{"type":"integer","description":"Step index (0-based)"},"status":{"type":"string","enum":["pending","running","done","failed"],"description":"New status"}},"required":["plan_id","step_index","status"]}}},
+    {"type":"function","function":{"name":"take_screenshot","description":"Capture the current screen. Returns screenshot file path and base64 image data.","parameters":{"type":"object","properties":{}}}},
+    {"type":"function","function":{"name":"mouse_click","description":"Click at specific screen coordinates.","parameters":{"type":"object","properties":{"x":{"type":"integer","description":"X coordinate"},"y":{"type":"integer","description":"Y coordinate"}},"required":["x","y"]}}},
+    {"type":"function","function":{"name":"keyboard_type","description":"Type text via keyboard. Supports Turkish characters.","parameters":{"type":"object","properties":{"text":{"type":"string","description":"Text to type"}},"required":["text"]}}},
 ]
 
 # ─── TOOL EXECUTOR ─────────────────────────────────────────────────
 def execute_tool(name: str, args: dict) -> str:
-    """Execute a tool and return the result as a string."""
     try:
         if name == "read_file":
             return read_file(args.get("path", ""))
@@ -267,6 +486,26 @@ def execute_tool(name: str, args: dict) -> str:
                 args.get("content", "")
             )
             return json.dumps(result, ensure_ascii=False)
+        elif name == "search_web":
+            return search_web(args.get("query", ""))
+        elif name == "remember_fact":
+            return remember_fact(args.get("text", ""), args.get("category", "general"))
+        elif name == "recall_memory":
+            return recall_memory(args.get("query", ""))
+        elif name == "create_plan":
+            return create_plan(args.get("goal", ""), args.get("steps", []))
+        elif name == "update_plan_step":
+            return update_plan_step(
+                args.get("plan_id", ""),
+                int(args.get("step_index", 0)),
+                args.get("status", "done")
+            )
+        elif name == "take_screenshot":
+            return take_screenshot()
+        elif name == "mouse_click":
+            return mouse_click(int(args.get("x", 0)), int(args.get("y", 0)))
+        elif name == "keyboard_type":
+            return keyboard_type(args.get("text", ""))
         else:
             return f"Unknown tool: {name}"
     except Exception as e:
@@ -274,23 +513,18 @@ def execute_tool(name: str, args: dict) -> str:
 
 # ─── PILLAR 4: AUTO-COMPACT ──────────────────────────────────────
 def estimate_tokens(text: str) -> int:
-    """Rough token estimation: ~4 chars per token for English, ~2 for Turkish."""
     return len(text) // 3
 
 def should_compact(messages: list, max_context: int = 8192) -> bool:
-    """Check if we've used >70% of context window."""
     total = sum(estimate_tokens(json.dumps(m)) for m in messages)
     return total > int(max_context * 0.7)
 
 async def auto_compact(messages: list, client_info: tuple) -> list:
-    """Summarize conversation history to free context."""
     provider, client = client_info
     if len(messages) < 4:
         return messages
-    
     system_msg = messages[0] if messages[0].get("role") == "system" else None
     conversation = messages[1:] if system_msg else messages
-    
     summary_prompt = [{
         "role": "system",
         "content": "Summarize the following conversation. Keep: 1) Files created/modified and their paths, 2) Current goal/task, 3) Any errors encountered. Be very concise."
@@ -298,28 +532,23 @@ async def auto_compact(messages: list, client_info: tuple) -> list:
         "role": "user",
         "content": json.dumps(conversation[-20:], ensure_ascii=False)[:6000]
     }]
-    
     try:
         cfg = load_config()
         model = _default_model_for(provider, cfg)
         resp = client.chat.completions.create(model=model, messages=summary_prompt, max_tokens=1024)
         summary = resp.choices[0].message.content
     except:
-        # Fallback: just keep last 6 messages
         summary = None
-    
     result = []
     if system_msg:
         result.append(system_msg)
     if summary:
         result.append({"role": "assistant", "content": f"[AUTO-COMPACT SUMMARY]\n{summary}"})
-    # Keep last 4 messages for immediate context
     result.extend(conversation[-4:])
     return result
 
 # ─── LLM CLIENT ───────────────────────────────────────────────────
 def get_clients() -> list:
-    """Return all available (provider, client, default_model) tuples in priority order."""
     from openai import OpenAI
     clients = []
     if k := get_key("groq_key"):
@@ -333,7 +562,6 @@ def get_clients() -> list:
     return clients
 
 def get_client():
-    """Get the primary LLM client based on config or .env."""
     clients = get_clients()
     if clients:
         return clients[0][0], clients[0][1]
@@ -348,14 +576,10 @@ def _default_model_for(provider: str, cfg: dict) -> str:
     return "llama-3.3-70b-versatile"
 
 # ─── PILLAR 1: THE REACT AGENT LOOP ──────────────────────────────
+# Active WebSocket connections for broadcasting plan updates
+_active_ws: list = []
+
 async def run_agent(user_message: str, ws: WebSocket = None, conversation_history: list = None):
-    """
-    The core ReAct loop:
-    1. Send message + tools to LLM
-    2. If LLM calls a tool → execute it → feed result back
-    3. If tool was run_bash and it failed → auto-retry with error context
-    4. Repeat until LLM gives a text response or max turns reached
-    """
     clients = get_clients()
     if not clients:
         yield {"type": "error", "content": "❌ API anahtarı yapılandırılmamış. Ayarlar'dan bir API anahtarı girin."}
@@ -365,71 +589,46 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
     provider, client, default_model = clients[client_idx]
     cfg = load_config()
     model = cfg.get("model") or default_model
-    
-    # Build system prompt with ALES.md injection (Pillar 5)
+
     system_prompt = BASE_SYSTEM + load_ales_md(_SESSION_CWD)
     system_prompt += f"\n\nCurrent working directory: {_SESSION_CWD}"
-    
-    # Initialize or continue conversation
+
     if conversation_history is None:
         conversation_history = []
-    
+
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
-    
-    # Pillar 4: Auto-compact if needed
+
     if should_compact(messages):
         yield {"type": "status", "content": "🗜️ Auto-compacting context..."}
         messages = await auto_compact(messages, (provider, client))
-    
+
     turn = 0
-    bash_retries = {}  # Track retries per command
-    
+    bash_retries = {}
+
     while turn < MAX_AGENT_TURNS:
         turn += 1
         yield {"type": "thinking", "content": f"🧠 Thinking... (turn {turn}/{MAX_AGENT_TURNS})"}
-        
+
         try:
-            # Call LLM
-            if provider == "groq":
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=TOOLS,
-                    tool_choice="auto",
-                    max_tokens=4096,
-                    temperature=0.1
-                )
-            elif provider == "openrouter":
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=TOOLS,
-                    tool_choice="auto",
-                    max_tokens=4096,
-                    temperature=0.1
-                )
-            else:
-                # Gemini or other - try OpenAI-compatible
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=TOOLS,
-                    tool_choice="auto",
-                    max_tokens=4096
-                )
-            
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                max_tokens=4096,
+                temperature=0.1
+            )
+
             choice = response.choices[0]
             msg = choice.message
-            
-            # If LLM returned text (no tool call) → we're done
+
             if not msg.tool_calls:
                 content = msg.content or ""
                 yield {"type": "response", "content": content}
                 return
-            
-            # Process tool calls
+
             messages.append({
                 "role": "assistant",
                 "content": msg.content or "",
@@ -439,33 +638,32 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
                     for tc in msg.tool_calls
                 ]
             })
-            
+
             for tool_call in msg.tool_calls:
                 fn_name = tool_call.function.name
                 try:
                     fn_args = json.loads(tool_call.function.arguments)
                 except:
                     fn_args = {}
-                
-                # Pillar 3: Permission check for run_bash
+
+                # Permission check for run_bash
                 if fn_name == "run_bash" and is_destructive(fn_args.get("command", "")):
                     cmd = fn_args.get("command", "")
                     yield {"type": "permission_request", "command": cmd, "tool_call_id": tool_call.id}
-                    
-                    # Wait for permission (with timeout)
+
                     req_id = tool_call.id
                     _permission_requests[req_id] = asyncio.Event()
                     _permission_results[req_id] = None
-                    
+
                     try:
                         await asyncio.wait_for(_permission_requests[req_id].wait(), timeout=120)
                     except asyncio.TimeoutError:
                         _permission_results[req_id] = False
-                    
+
                     allowed = _permission_results.get(req_id, False)
                     del _permission_requests[req_id]
                     del _permission_results[req_id]
-                    
+
                     if not allowed:
                         tool_result = "⚠️ User denied this command. Try a different approach."
                         yield {"type": "tool_denied", "tool": fn_name, "command": cmd}
@@ -481,23 +679,30 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
                         EXECUTOR, execute_tool, fn_name, fn_args
                     )
                     yield {"type": "tool_result", "tool": fn_name, "result": tool_result[:2000]}
-                
-                # Add tool result to messages
+
+                    # Broadcast plan updates to frontend
+                    if fn_name in ("create_plan", "update_plan_step"):
+                        plans = _load_plans()
+                        for active_ws in _active_ws:
+                            try:
+                                await active_ws.send_json({"type": "plan_update", "plans": plans})
+                            except:
+                                pass
+
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": tool_result[:4000]
                 })
-                
-                # Auto-correction for bash failures (Pillar 1)
+
+                # Auto-correction for bash failures
                 if fn_name == "run_bash" and "[EXIT CODE:" in tool_result and "[EXIT CODE: 0]" not in tool_result:
                     cmd_key = fn_args.get("command", "")[:100]
                     retries = bash_retries.get(cmd_key, 0)
                     if retries < 5:
                         bash_retries[cmd_key] = retries + 1
                         yield {"type": "status", "content": f"⚠️ Command failed. Auto-retry {retries+1}/5..."}
-                        # The error is already in messages, LLM will see it and try to fix
-        
+
         except Exception as e:
             if client_idx + 1 < len(clients):
                 client_idx += 1
@@ -509,11 +714,10 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
             error_msg = f"LLM Error: {e}"
             yield {"type": "error", "content": error_msg}
             return
-    
+
     yield {"type": "response", "content": "⚠️ Maximum agent turns (15) reached. Task may be incomplete."}
 
 # ─── WEBSOCKET ENDPOINT ──────────────────────────────────────────
-# Per-connection conversation history
 _conversations: dict = {}
 
 @app.websocket("/ws")
@@ -521,48 +725,51 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     conn_id = id(ws)
     _conversations[conn_id] = []
-    
+    _active_ws.append(ws)
+
     try:
         while True:
             data = await ws.receive_json()
             msg_type = data.get("type", "chat")
-            
+
             if msg_type == "chat":
                 user_msg = data.get("message", "")
                 if not user_msg.strip():
                     continue
-                
+
                 _conversations[conn_id].append({"role": "user", "content": user_msg})
-                
+
                 async for event in run_agent(user_msg, ws, _conversations[conn_id]):
                     await ws.send_json(event)
-                    
-                    # Capture the final response for history
+
                     if event["type"] == "response":
                         _conversations[conn_id].append({
                             "role": "assistant",
                             "content": event["content"]
                         })
-                        # Keep history manageable
                         if len(_conversations[conn_id]) > 40:
                             _conversations[conn_id] = _conversations[conn_id][-30:]
-            
+
             elif msg_type == "permission_response":
                 req_id = data.get("tool_call_id")
                 allowed = data.get("allowed", False)
                 if req_id in _permission_requests:
                     _permission_results[req_id] = allowed
                     _permission_requests[req_id].set()
-            
+
             elif msg_type == "clear":
                 _conversations[conn_id] = []
                 await ws.send_json({"type": "status", "content": "Conversation cleared."})
-    
+
     except WebSocketDisconnect:
         _conversations.pop(conn_id, None)
+        if ws in _active_ws:
+            _active_ws.remove(ws)
     except Exception as e:
         print(f"[WS ERROR] {e}")
         _conversations.pop(conn_id, None)
+        if ws in _active_ws:
+            _active_ws.remove(ws)
 
 # ─── REST ENDPOINTS ──────────────────────────────────────────────
 @app.get("/status")
@@ -570,18 +777,17 @@ def status():
     provider, client = get_client()
     return {
         "status": "running",
-        "version": "4.0",
+        "version": "5.0",
         "provider": provider,
         "has_key": client is not None,
         "cwd": _SESSION_CWD,
         "tools": len(TOOLS),
-        "architecture": "Claude Code (7 Pillars)"
+        "architecture": "Claude Code (7 Pillars) + Extended"
     }
 
 @app.get("/config")
 def get_config():
     cfg = load_config()
-    # Mask keys
     masked = {}
     for k, v in cfg.items():
         if k.endswith("_key") and v:
@@ -607,24 +813,78 @@ async def test_key(request: Request):
         if provider == "groq":
             from openai import OpenAI
             c = OpenAI(api_key=key, base_url="https://api.groq.com/openai/v1")
-            c.chat.completions.create(
-                model="openai/gpt-oss-120b",
-                messages=[{"role": "user", "content": "hi"}],
-                max_tokens=5
-            )
+            c.chat.completions.create(model="openai/gpt-oss-120b", messages=[{"role":"user","content":"hi"}], max_tokens=5)
             return {"ok": True, "model": "openai/gpt-oss-120b"}
         elif provider == "gemini":
             from openai import OpenAI
             c = OpenAI(api_key=key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
-            c.chat.completions.create(
-                model="gemini-3.8-flash",
-                messages=[{"role": "user", "content": "hi"}],
-                max_tokens=5
-            )
+            c.chat.completions.create(model="gemini-3.8-flash", messages=[{"role":"user","content":"hi"}], max_tokens=5)
             return {"ok": True, "model": "gemini-3.8-flash"}
         return {"ok": False, "error": f"Unknown provider: {provider}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+# ─── PLANS API ───────────────────────────────────────────────────
+@app.get("/api/plans")
+def api_plans_list():
+    return _load_plans()
+
+@app.get("/api/plans/{plan_id}")
+def api_plan_get(plan_id: str):
+    for plan in _load_plans():
+        if plan["id"] == plan_id:
+            return plan
+    return JSONResponse({"error": "Not found"}, status_code=404)
+
+# ─── MEMORY API ──────────────────────────────────────────────────
+@app.get("/api/memory")
+def api_memory_list():
+    collection = _get_memory_collection()
+    if collection is None or collection.count() == 0:
+        return {"count": 0, "items": []}
+    try:
+        all_data = collection.get(limit=100, include=["documents", "metadatas"])
+        items = []
+        for doc, meta, doc_id in zip(all_data["documents"], all_data["metadatas"], all_data["ids"]):
+            items.append({"id": doc_id, "text": doc, "category": meta.get("category", "general"), "timestamp": meta.get("timestamp", "")})
+        return {"count": collection.count(), "items": items}
+    except Exception as e:
+        return {"count": 0, "items": [], "error": str(e)}
+
+@app.get("/api/memory/search")
+def api_memory_search(q: str = ""):
+    if not q:
+        return {"results": []}
+    result = recall_memory(q)
+    return {"query": q, "result": result}
+
+@app.delete("/api/memory/{mem_id}")
+def api_memory_delete(mem_id: str):
+    collection = _get_memory_collection()
+    if collection is None:
+        return {"ok": False, "error": "Memory unavailable"}
+    try:
+        collection.delete(ids=[mem_id])
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+# ─── SCREENSHOT API ──────────────────────────────────────────────
+@app.get("/api/screenshot")
+def api_screenshot():
+    result = take_screenshot()
+    try:
+        return json.loads(result)
+    except:
+        return {"error": result}
+
+@app.get("/static/screenshots/{filename}")
+async def serve_screenshot(filename: str):
+    ss_dir = Path(__file__).parent / "static" / "screenshots"
+    file_path = ss_dir / filename
+    if file_path.exists():
+        return FileResponse(str(file_path), media_type="image/png")
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 # ─── SPEAK ENDPOINT ──────────────────────────────────────────────
 @app.post("/speak")
@@ -647,13 +907,13 @@ async def serve_pdf(filename: str):
     file_path = pdf_dir / filename
     if file_path.exists():
         return FileResponse(str(file_path), media_type="application/pdf", filename=filename)
-    return {"error": "File not found"}
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 # ─── STARTUP ─────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    print(f"[ALES] Claude Code Architecture — 7 Pillars")
-    print(f"[ALES] Tools: {len(TOOLS)} core primitives")
+    print(f"[ALES] Claude Code Architecture — 7 Pillars + Extended Tools")
+    print(f"[ALES] Tools: {len(TOOLS)} total")
     print(f"[ALES] CWD: {_SESSION_CWD}")
     print(f"[ALES] Starting on http://0.0.0.0:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

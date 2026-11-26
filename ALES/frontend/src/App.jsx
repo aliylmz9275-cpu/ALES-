@@ -7,15 +7,8 @@ const backendHost = (typeof window !== 'undefined' && window.location.hostname) 
 const API_URL = isCloud ? window.location.origin : `http://${backendHost}:8000`
 const WS_URL = isCloud ? window.location.origin.replace(/^http/, 'ws') + '/ws' : `ws://${backendHost}:8000/ws`
 
-function getCloudKey() {
-  try { return isCloud ? (localStorage.getItem('ales_cloud_key') || '') : '' } catch { return '' }
-}
-function setCloudKey(key) {
-  try { if (isCloud) localStorage.setItem('ales_cloud_key', key) } catch {}
-}
 function authFetch(url, opts = {}) {
-  const key = getCloudKey()
-  const headers = { ...(opts.headers || {}), ...(key ? { 'X-ALES-Key': key } : {}) }
+  const headers = { ...(opts.headers || {}) }
   return fetch(url, { ...opts, headers })
 }
 
@@ -52,11 +45,18 @@ function renderMessageContent(text) {
   return parts
 }
 
-// ─── TOOL ICON MAP ──────────────────────────────────────────────
+// Tool icons
 const TOOL_ICONS = {
-  read_file: '📖', write_file: '✍️', edit_file: '✏️',
-  run_bash: '💻', grep_search: '🔍', glob_search: '📁',
-  generate_pdf: '📄'
+  read_file:'📖', write_file:'✍️', edit_file:'✏️', run_bash:'💻',
+  grep_search:'🔍', glob_search:'📁', generate_pdf:'📄',
+  search_web:'🌐', remember_fact:'💾', recall_memory:'🧠',
+  create_plan:'📋', update_plan_step:'✅', take_screenshot:'📸',
+  mouse_click:'🖱️', keyboard_type:'⌨️'
+}
+
+// Status badge colors
+const STATUS_COLORS = {
+  pending: '#666', running: '#ffa500', done: '#4ade80', failed: '#f87171'
 }
 
 // ─── PERMISSION MODAL ───────────────────────────────────────────
@@ -147,9 +147,17 @@ export default function App() {
   const [thinking, setThinking] = useState(false)
   const [tab, setTab] = useState('chat')
   const [showSetup, setShowSetup] = useState(false)
-  const [agentLog, setAgentLog] = useState([]) // For terminal tab
-  const [permissionReq, setPermissionReq] = useState(null) // {command, tool_call_id}
+  const [agentLog, setAgentLog] = useState([])
+  const [permissionReq, setPermissionReq] = useState(null)
   const [settings, setSettings] = useState({})
+  // Plans state
+  const [plans, setPlans] = useState([])
+  // Memory state
+  const [memories, setMemories] = useState([])
+  const [memSearch, setMemSearch] = useState('')
+  const [memResults, setMemResults] = useState('')
+  // Screenshot state
+  const [latestScreenshot, setLatestScreenshot] = useState(null)
   const wsRef = useRef(null)
   const bottomRef = useRef(null)
   const reconnectRef = useRef(null)
@@ -166,6 +174,15 @@ export default function App() {
       if (!cfg.groq_key && !cfg.gemini_key) setShowSetup(true)
     }).catch(() => {})
   }, [])
+
+  // Load plans & memory on tab switch
+  useEffect(() => {
+    if (tab === 'plans') {
+      authFetch(`${API_URL}/api/plans`).then(r => r.json()).then(setPlans).catch(() => {})
+    } else if (tab === 'memory') {
+      authFetch(`${API_URL}/api/memory`).then(r => r.json()).then(d => setMemories(d.items || [])).catch(() => {})
+    }
+  }, [tab])
 
   // WebSocket connection
   const connectWS = useCallback(() => {
@@ -190,9 +207,17 @@ export default function App() {
               break
             case 'tool_call':
               setAgentLog(prev => [...prev, {type:'tool', name: data.tool, args: data.args, time: Date.now()}])
+              // If screenshot tool, we expect a result with URL
               break
             case 'tool_result':
               setAgentLog(prev => [...prev, {type:'result', name: data.tool, text: data.result, time: Date.now()}])
+              // Capture screenshot URL from result
+              if (data.tool === 'take_screenshot' && data.result) {
+                try {
+                  const ssData = JSON.parse(data.result)
+                  if (ssData.url) setLatestScreenshot(`${API_URL}${ssData.url}`)
+                } catch {}
+              }
               break
             case 'tool_denied':
               setAgentLog(prev => [...prev, {type:'denied', name: data.tool, command: data.command, time: Date.now()}])
@@ -202,6 +227,9 @@ export default function App() {
               break
             case 'status':
               setAgentLog(prev => [...prev, {type:'status', text: data.content, time: Date.now()}])
+              break
+            case 'plan_update':
+              setPlans(data.plans || [])
               break
             case 'response':
               setThinking(false)
@@ -246,15 +274,48 @@ export default function App() {
     setPermissionReq(null)
   }
 
+  const searchMemory = async () => {
+    if (!memSearch.trim()) return
+    try {
+      const r = await authFetch(`${API_URL}/api/memory/search?q=${encodeURIComponent(memSearch)}`)
+      const d = await r.json()
+      setMemResults(d.result || 'No results.')
+    } catch { setMemResults('Search failed.') }
+  }
+
+  const deleteMemory = async (memId) => {
+    try {
+      await authFetch(`${API_URL}/api/memory/${memId}`, {method:'DELETE'})
+      setMemories(prev => prev.filter(m => m.id !== memId))
+    } catch {}
+  }
+
+  const takeScreenshotNow = async () => {
+    try {
+      const r = await authFetch(`${API_URL}/api/screenshot`)
+      const d = await r.json()
+      if (d.url) setLatestScreenshot(`${API_URL}${d.url}`)
+    } catch {}
+  }
+
   // ─── RENDER ──────────────────────────────────────────────────
   const tabStyle = (t) => ({
-    padding: '8px 20px', cursor: 'pointer', fontSize: 12, fontWeight: 700,
-    letterSpacing: 2, fontFamily: 'monospace', border: 'none',
+    padding: '8px 16px', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+    letterSpacing: 1.5, fontFamily: 'monospace', border: 'none',
     background: tab === t ? 'rgba(255,255,255,0.12)' : 'transparent',
     color: tab === t ? '#fff' : '#666',
     borderBottom: tab === t ? '2px solid #fff' : '2px solid transparent',
     transition: 'all .15s'
   })
+
+  const TABS = [
+    {id:'chat', label:'SOHBET'},
+    {id:'terminal', label:'TERMİNAL'},
+    {id:'plans', label:'PLANLAR'},
+    {id:'memory', label:'HAFIZA'},
+    {id:'screen', label:'EKRAN'},
+    {id:'settings', label:'AYARLAR'}
+  ]
 
   return (
     <div style={{width:'100vw',height:'100vh',background:'#0a0a0f',color:'#e4e4e7',display:'flex',flexDirection:'column',fontFamily:"'Inter',system-ui,sans-serif"}}>
@@ -274,7 +335,7 @@ export default function App() {
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 20px',height:48,borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <span style={{fontSize:16,fontWeight:900,letterSpacing:3,fontFamily:"'Share Tech Mono',monospace",color:'#fff'}}>ALES</span>
-          <span style={{fontSize:9,color:'#555',fontFamily:'monospace'}}>v4.0 · Claude Code Architecture</span>
+          <span style={{fontSize:9,color:'#555',fontFamily:'monospace'}}>v5.0 · Claude Code + Extended</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <div style={{width:7,height:7,borderRadius:'50%',background:connected?'#4ade80':'#f87171'}} />
@@ -283,22 +344,28 @@ export default function App() {
       </div>
 
       {/* Tabs */}
-      <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
-        <button style={tabStyle('chat')} onClick={() => setTab('chat')}>SOHBET</button>
-        <button style={tabStyle('terminal')} onClick={() => setTab('terminal')}>TERMİNAL</button>
-        <button style={tabStyle('settings')} onClick={() => setTab('settings')}>AYARLAR</button>
+      <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0,overflowX:'auto'}}>
+        {TABS.map(t => (
+          <button key={t.id} style={tabStyle(t.id)} onClick={() => setTab(t.id)}>{t.label}</button>
+        ))}
       </div>
 
       {/* Content */}
       <div style={{flex:1,overflow:'auto',padding:'16px 20px'}}>
+
         {/* ─── CHAT TAB ──────────────────────────────── */}
         {tab === 'chat' && (
           <div style={{maxWidth:800,margin:'0 auto'}}>
             {messages.length === 0 && !thinking && (
               <div style={{textAlign:'center',paddingTop:80,color:'#444'}}>
                 <div style={{fontSize:48,marginBottom:16}}>⚡</div>
-                <div style={{fontSize:16,fontWeight:600,color:'#666'}}>ALES v4.0</div>
-                <div style={{fontSize:12,color:'#444',marginTop:8,fontFamily:'monospace'}}>Claude Code Architecture · 7 Tools · ReAct Loop</div>
+                <div style={{fontSize:16,fontWeight:600,color:'#666'}}>ALES v5.0</div>
+                <div style={{fontSize:12,color:'#444',marginTop:8,fontFamily:'monospace'}}>Claude Code Architecture · {TABS.length} Tabs · 15 Tools · ReAct Loop</div>
+                <div style={{fontSize:11,color:'#333',marginTop:16,fontFamily:'monospace',lineHeight:1.8}}>
+                  🛠️ read_file · write_file · edit_file · run_bash · grep · glob<br/>
+                  🌐 search_web · 💾 remember_fact · 🧠 recall_memory<br/>
+                  📋 create_plan · 📸 take_screenshot · 🖱️ mouse_click · ⌨️ keyboard_type
+                </div>
               </div>
             )}
             {messages.map((m, i) => (
@@ -326,7 +393,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── TERMINAL TAB (Agent Activity Log) ─────── */}
+        {/* ─── TERMINAL TAB ──────────────────────────── */}
         {tab === 'terminal' && (
           <div style={{fontFamily:'monospace',fontSize:12,maxWidth:900,margin:'0 auto'}}>
             <div style={{color:'#555',marginBottom:12,fontSize:11}}>Agent Activity Log — ReAct Loop Trace</div>
@@ -335,6 +402,7 @@ export default function App() {
             )}
             {agentLog.map((entry, i) => {
               const timeStr = new Date(entry.time).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit',second:'2-digit'})
+              const icon = TOOL_ICONS[entry.name] || '🛠️'
               if (entry.type === 'thinking') return (
                 <div key={i} style={{padding:'4px 0',color:'#ffa500'}}>
                   <span style={{color:'#555'}}>{timeStr}</span> 🧠 {entry.text}
@@ -342,12 +410,12 @@ export default function App() {
               )
               if (entry.type === 'tool') return (
                 <div key={i} style={{padding:'4px 0',color:'#38bdf8'}}>
-                  <span style={{color:'#555'}}>{timeStr}</span> 🛠️ <b>{entry.name}</b>({JSON.stringify(entry.args || {}).substring(0, 120)})
+                  <span style={{color:'#555'}}>{timeStr}</span> {icon} <b>{entry.name}</b>({JSON.stringify(entry.args || {}).substring(0, 120)})
                 </div>
               )
               if (entry.type === 'result') return (
                 <div key={i} style={{padding:'4px 0',color:'#86efac'}}>
-                  <span style={{color:'#555'}}>{timeStr}</span> 💻 <span style={{color:'#666'}}>[{entry.name}]</span> {entry.text?.substring(0, 300)}
+                  <span style={{color:'#555'}}>{timeStr}</span> {icon} <span style={{color:'#666'}}>[{entry.name}]</span> {entry.text?.substring(0, 300)}
                 </div>
               )
               if (entry.type === 'denied') return (
@@ -376,11 +444,141 @@ export default function App() {
           </div>
         )}
 
+        {/* ─── PLANS TAB ─────────────────────────────── */}
+        {tab === 'plans' && (
+          <div style={{maxWidth:700,margin:'0 auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:16,color:'#fff',display:'flex',alignItems:'center',gap:8}}>
+              📋 Plans
+              <button onClick={() => authFetch(`${API_URL}/api/plans`).then(r=>r.json()).then(setPlans).catch(()=>{})}
+                style={{fontSize:11,padding:'4px 10px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,color:'#999',cursor:'pointer',fontFamily:'monospace'}}>
+                ↻ Refresh
+              </button>
+            </div>
+            {plans.length === 0 && (
+              <div style={{color:'#444',padding:40,textAlign:'center',fontFamily:'monospace',fontSize:13}}>
+                No plans yet. Ask ALES to "create a plan to..." in chat.
+              </div>
+            )}
+            {plans.map((plan, pi) => (
+              <div key={plan.id} style={{marginBottom:20,background:'rgba(255,255,255,0.04)',borderRadius:12,padding:'16px 20px',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:'#fff'}}>{plan.goal}</div>
+                    <div style={{fontSize:10,color:'#555',fontFamily:'monospace',marginTop:2}}>{plan.id} · {plan.created_at?.substring(0,19)}</div>
+                  </div>
+                  <span style={{
+                    fontSize:11,fontWeight:700,fontFamily:'monospace',
+                    padding:'3px 10px',borderRadius:6,
+                    background: plan.status==='done'?'rgba(74,222,128,0.2)':plan.status==='running'?'rgba(255,165,0,0.2)':plan.status==='failed'?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.08)',
+                    color: STATUS_COLORS[plan.status] || '#666'
+                  }}>{plan.status?.toUpperCase()}</span>
+                </div>
+                {plan.steps?.map((step, si) => (
+                  <div key={si} style={{
+                    display:'flex',alignItems:'center',gap:10,padding:'8px 12px',
+                    background: step.status==='done'?'rgba(74,222,128,0.06)':step.status==='running'?'rgba(255,165,0,0.06)':step.status==='failed'?'rgba(248,113,113,0.06)':'transparent',
+                    borderRadius:6,marginBottom:4
+                  }}>
+                    <span style={{fontSize:16}}>
+                      {step.status==='done'?'✅':step.status==='running'?'⏳':step.status==='failed'?'❌':'⬜'}
+                    </span>
+                    <span style={{fontSize:13,color:step.status==='done'?'#86efac':step.status==='failed'?'#fca5a5':'#ccc',flex:1}}>
+                      {step.title}
+                    </span>
+                    <span style={{fontSize:10,color:'#555',fontFamily:'monospace'}}>{step.status}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ─── MEMORY TAB ────────────────────────────── */}
+        {tab === 'memory' && (
+          <div style={{maxWidth:700,margin:'0 auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:16,color:'#fff',display:'flex',alignItems:'center',gap:8}}>
+              🧠 Memory (ChromaDB)
+              <button onClick={() => authFetch(`${API_URL}/api/memory`).then(r=>r.json()).then(d=>setMemories(d.items||[])).catch(()=>{})}
+                style={{fontSize:11,padding:'4px 10px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:6,color:'#999',cursor:'pointer',fontFamily:'monospace'}}>
+                ↻ Refresh
+              </button>
+            </div>
+            {/* Search box */}
+            <div style={{display:'flex',gap:8,marginBottom:16}}>
+              <input value={memSearch} onChange={e=>setMemSearch(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&searchMemory()}
+                placeholder="Search memory..."
+                style={{flex:1,padding:'10px 12px',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'#fff',fontSize:13,fontFamily:'monospace',outline:'none'}} />
+              <button onClick={searchMemory}
+                style={{padding:'10px 16px',background:'rgba(255,255,255,0.1)',color:'#fff',border:'1px solid rgba(255,255,255,0.2)',borderRadius:8,cursor:'pointer',fontFamily:'monospace',fontWeight:600,fontSize:13}}>
+                🔍
+              </button>
+            </div>
+            {memResults && (
+              <div style={{marginBottom:16,padding:'12px 16px',background:'rgba(74,222,128,0.08)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:8,fontSize:13,color:'#86efac',fontFamily:'monospace',whiteSpace:'pre-wrap'}}>
+                {memResults}
+              </div>
+            )}
+            {/* Memory list */}
+            {memories.length === 0 && (
+              <div style={{color:'#444',padding:40,textAlign:'center',fontFamily:'monospace',fontSize:13}}>
+                Memory is empty. ALES will save important facts here automatically.
+              </div>
+            )}
+            {memories.map((mem, i) => (
+              <div key={mem.id} style={{
+                marginBottom:8,padding:'12px 16px',
+                background:'rgba(255,255,255,0.04)',borderRadius:8,
+                border:'1px solid rgba(255,255,255,0.06)',
+                display:'flex',gap:12,alignItems:'flex-start'
+              }}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,color:'#ddd',lineHeight:1.5}}>{mem.text}</div>
+                  <div style={{fontSize:10,color:'#555',fontFamily:'monospace',marginTop:4}}>
+                    [{mem.category}] · {mem.timestamp?.substring(0,19)} · {mem.id}
+                  </div>
+                </div>
+                <button onClick={() => deleteMemory(mem.id)}
+                  style={{padding:'4px 8px',background:'rgba(248,113,113,0.1)',color:'#f87171',border:'1px solid rgba(248,113,113,0.3)',borderRadius:6,cursor:'pointer',fontSize:11,fontFamily:'monospace',flexShrink:0}}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ─── SCREEN TAB (Vision/GUI) ───────────────── */}
+        {tab === 'screen' && (
+          <div style={{maxWidth:900,margin:'0 auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:16,color:'#fff',display:'flex',alignItems:'center',gap:8}}>
+              📸 Screen Stream
+              <button onClick={takeScreenshotNow}
+                style={{fontSize:11,padding:'4px 10px',background:'rgba(56,189,248,0.15)',border:'1px solid rgba(56,189,248,0.3)',borderRadius:6,color:'#38bdf8',cursor:'pointer',fontFamily:'monospace'}}>
+                📸 Take Screenshot
+              </button>
+            </div>
+            {latestScreenshot ? (
+              <div>
+                <img src={latestScreenshot} alt="Screen" style={{width:'100%',maxHeight:'70vh',objectFit:'contain',borderRadius:8,border:'1px solid rgba(255,255,255,0.1)'}} />
+                <div style={{fontSize:10,color:'#555',fontFamily:'monospace',marginTop:8,textAlign:'center'}}>
+                  Click "Take Screenshot" to refresh · Ask ALES to interact with the screen via chat
+                </div>
+              </div>
+            ) : (
+              <div style={{color:'#444',padding:60,textAlign:'center',fontFamily:'monospace',fontSize:13,border:'1px dashed rgba(255,255,255,0.1)',borderRadius:12}}>
+                <div style={{fontSize:48,marginBottom:16}}>📸</div>
+                <div>No screenshot yet.</div>
+                <div style={{marginTop:8,fontSize:11,color:'#555'}}>Click the button above or ask ALES: "take a screenshot"</div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ─── SETTINGS TAB ──────────────────────────── */}
         {tab === 'settings' && (
           <div style={{maxWidth:500,margin:'0 auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:20,color:'#fff'}}>⚙️ Settings</div>
-            {['groq_key', 'gemini_key', 'openrouter_key', 'openai_key', 'elevenlabs_key'].map(k => (
+            {['groq_key', 'gemini_key', 'openrouter_key', 'nvidia_key', 'openai_key', 'elevenlabs_key'].map(k => (
               <div key={k} style={{marginBottom:14}}>
                 <label style={{fontSize:12,color:'#999',fontFamily:'monospace',display:'block',marginBottom:4}}>{k}</label>
                 <input
@@ -402,11 +600,12 @@ export default function App() {
               </div>
             ))}
             <div style={{marginTop:20,padding:'14px',background:'rgba(255,255,255,0.04)',borderRadius:8,fontSize:11,color:'#666',fontFamily:'monospace',lineHeight:1.6}}>
-              <div>Architecture: Claude Code (7 Pillars)</div>
-              <div>Tools: read_file, write_file, edit_file, run_bash, grep_search, glob_search, generate_pdf</div>
+              <div>Architecture: Claude Code (7 Pillars) + Extended Tools</div>
+              <div>Tools: read_file, write_file, edit_file, run_bash, grep, glob, generate_pdf, search_web, remember_fact, recall_memory, create_plan, update_plan_step, take_screenshot, mouse_click, keyboard_type</div>
               <div>Max Agent Turns: 15</div>
               <div>Auto-Compact: 70% context threshold</div>
               <div>Permission Gate: destructive commands require approval</div>
+              <div>Memory: ChromaDB vector store</div>
             </div>
           </div>
         )}

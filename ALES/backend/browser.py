@@ -112,21 +112,44 @@ def get_exchange_rates() -> str:
         return f"[HATA] Doviz alinamadi: {e}"
 
 def google_search(query: str) -> str:
-    """DuckDuckGo ile arama (API key yok)"""
+    """DuckDuckGo ile web aramasi (HTML lite + Instant Answer fallback, API key yok)"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    results = []
+    # 1. Try DuckDuckGo HTML Lite for real search results
     try:
-        url = f"https://api.duckduckgo.com/?q={quote(query)}&format=json&no_html=1&skip_disambig=1"
-        with httpx.Client(timeout=8) as client:
-            r = client.get(url)
-            data = r.json()
-            results = []
-            if data.get("AbstractText"):
-                results.append(f"[SONUC] {data['AbstractText'][:500]}")
-            for item in data.get("RelatedTopics", [])[:5]:
-                if isinstance(item, dict) and item.get("Text"):
-                    results.append(f"  * {item['Text'][:200]}")
-            return "\n".join(results) if results else f"'{query}' icin sonuc bulunamadi."
-    except Exception as e:
-        return f"[HATA] Arama hatasi: {e}"
+        url = f"https://html.duckduckgo.com/html/?q={quote(query)}"
+        with httpx.Client(timeout=10, follow_redirects=True) as client:
+            r = client.get(url, headers=headers)
+            if r.status_code == 200 and r.text:
+                titles = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>', r.text, re.DOTALL)
+                snippets = re.findall(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', r.text, re.DOTALL)
+                for i, (href, raw_title) in enumerate(titles[:5]):
+                    title = re.sub(r'<[^>]+>', '', raw_title).strip()
+                    snip = re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ""
+                    if title:
+                        results.append(f"  * {title}\n    URL: {href}\n    {snip[:200]}")
+    except Exception:
+        pass
+
+    # 2. Fallback to Instant Answer API if HTML Lite returned nothing
+    if not results:
+        try:
+            url = f"https://api.duckduckgo.com/?q={quote(query)}&format=json&no_html=1&skip_disambig=1"
+            with httpx.Client(timeout=8, follow_redirects=True) as client:
+                r = client.get(url, headers=headers)
+                if r.status_code == 200 and r.text.strip():
+                    data = r.json()
+                    if data.get("AbstractText"):
+                        results.append(f"[SONUC] {data['AbstractText'][:500]}")
+                    for item in data.get("RelatedTopics", [])[:5]:
+                        if isinstance(item, dict) and item.get("Text"):
+                            results.append(f"  * {item['Text'][:200]}")
+        except Exception as e:
+            return f"[HATA] Arama hatasi: {e}"
+
+    return "\n".join(results) if results else f"'{query}' icin sonuc bulunamadi."
 
 def get_worldview() -> str:
     """Tam worldview ozeti - HIZ: 5 ayri HTTP kaynagi (hava, deprem, doviz,
