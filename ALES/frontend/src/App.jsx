@@ -15,50 +15,6 @@ function authFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers })
 }
 
-// Render PDF download pills & links inside assistant messages
-function renderMessageContent(text) {
-  if (!text || typeof text !== 'string') return text
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s)"',`]+|\/static\/pdfs\/[^\s)"',`]+)/g
-  if (!linkRegex.test(text)) return text
-  const parts = []
-  let lastIndex = 0
-  let match
-  linkRegex.lastIndex = 0
-  while ((match = linkRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) parts.push(text.substring(lastIndex, match.index))
-    const url = (match[2] || match[3] || '').trim()
-    const label = (match[1] || url.split('/').pop() || 'Dosya').trim()
-    const fullUrl = url.startsWith('/') && !url.startsWith('//') ? `${API_URL}${url}` : url
-    const isPdf = url.toLowerCase().includes('.pdf') || url.includes('/static/pdfs/')
-    if (isPdf) {
-      parts.push(
-        <a key={match.index} href={fullUrl} target="_blank" rel="noopener noreferrer" download className="pdf-pill">
-          <span>📄</span>
-          <span>{label}</span>
-          <span style={{ opacity: 0.75, fontSize: 11 }}>PDF ⬇</span>
-        </a>
-      )
-    } else {
-      parts.push(
-        <a key={match.index} href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
-          {label}
-        </a>
-      )
-    }
-    lastIndex = linkRegex.lastIndex
-  }
-  if (lastIndex < text.length) parts.push(text.substring(lastIndex))
-  return parts
-}
-
-const TOOL_ICONS = {
-  read_file: '📖', write_file: '✍️', edit_file: '✏️', run_bash: '💻',
-  grep_search: '🔍', glob_search: '📁', generate_pdf: '📄',
-  search_web: '🌐', remember_fact: '💾', recall_memory: '🧠',
-  create_plan: '📋', update_plan_step: '✅', take_screenshot: '📸',
-  mouse_click: '🖱️', keyboard_type: '⌨️'
-}
-
 // ─── ACCESS CODE LOGIN SCREEN ────────────────────────────────────
 function LoginScreen({ onAuthenticated }) {
   const [accessCode, setAccessCode] = useState('')
@@ -84,10 +40,7 @@ function LoginScreen({ onAuthenticated }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             access_code: code,
-            keys: {
-              groq_key: groqKey.trim(),
-              gemini_key: geminiKey.trim()
-            }
+            keys: { groq_key: groqKey.trim(), gemini_key: geminiKey.trim() }
           })
         })
         const data = await res.json()
@@ -224,8 +177,7 @@ function PermissionModal({ command, onAllow, onDeny }) {
 // ─── SETTINGS MODAL ──────────────────────────────────────────────
 function SettingsModal({ accessCode, onClose }) {
   const [keys, setKeys] = useState({
-    groq_key: '', gemini_key: '', openrouter_key: '',
-    nvidia_key: '', openai_key: '', elevenlabs_key: ''
+    groq_key: '', gemini_key: '', openrouter_key: '', nvidia_key: ''
   })
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
@@ -254,7 +206,7 @@ function SettingsModal({ accessCode, onClose }) {
         })
       }
       setSavedMsg('Ayarlar güvenli şekilde kaydedildi.')
-      setKeys({ groq_key: '', gemini_key: '', openrouter_key: '', nvidia_key: '', openai_key: '', elevenlabs_key: '' })
+      setKeys({ groq_key: '', gemini_key: '', openrouter_key: '', nvidia_key: '' })
     } catch {
       setSavedMsg('Kaydetme sırasında hata oluştu.')
     } finally {
@@ -264,12 +216,12 @@ function SettingsModal({ accessCode, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
         <div className="modal-header">
           <div>
             <div className="modal-title">Ayarlar</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              API anahtarları sunucu profilinizde şifrelenmiş oturum olarak saklanır.
+              API anahtarları sunucu profilinizde saklanır.
             </div>
           </div>
           <button className="btn btn-ghost" onClick={onClose} style={{ padding: '6px 10px' }}>✕</button>
@@ -277,12 +229,10 @@ function SettingsModal({ accessCode, onClose }) {
 
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {[
-            ['groq_key', 'Groq API Key', 'gsk_...'],
-            ['gemini_key', 'Gemini API Key', 'AIza...'],
+            ['groq_key', 'Groq API Key (llama-3.3-70b-versatile)', 'gsk_...'],
+            ['gemini_key', 'Gemini API Key (gemini-3.8-flash)', 'AIza...'],
             ['openrouter_key', 'OpenRouter API Key', 'sk-or-...'],
             ['nvidia_key', 'NVIDIA API Key', 'nvapi-...'],
-            ['openai_key', 'OpenAI API Key (TTS)', 'sk-...'],
-            ['elevenlabs_key', 'ElevenLabs API Key', '...'],
           ].map(([field, label, ph]) => (
             <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{label}</label>
@@ -314,6 +264,59 @@ function SettingsModal({ accessCode, onClose }) {
   )
 }
 
+// ─── CONSOLE STEP RENDERER ───────────────────────────────────────
+function ConsoleStepList({ steps }) {
+  if (!steps || steps.length === 0) return null
+  return (
+    <div className="console-stream">
+      {steps.map((s, idx) => {
+        if (s.kind === 'thought') {
+          return (
+            <div key={idx} className="console-line console-thought">
+              <span>🧠</span>
+              <span><b>Thinking:</b> {s.text}</span>
+            </div>
+          )
+        }
+        if (s.kind === 'tool_call') {
+          const argSummary = JSON.stringify(s.args || {})
+          return (
+            <div key={idx} className="console-line console-tool">
+              <span>🛠️</span>
+              <span><b>Tool Call:</b> {s.tool}({argSummary.length > 140 ? argSummary.slice(0, 140) + '…' : argSummary})</span>
+            </div>
+          )
+        }
+        if (s.kind === 'tool_result') {
+          return (
+            <div key={idx} className="console-line" style={{ flexDirection: 'column', gap: 4 }}>
+              <span style={{ color: '#94a3b8' }}>📄 <b>Output:</b></span>
+              <pre className="console-output">{s.text}</pre>
+            </div>
+          )
+        }
+        if (s.kind === 'success') {
+          return (
+            <div key={idx} className="console-line console-success">
+              <span>✅</span>
+              <span><b>Success:</b> {s.text || 'Task completed.'}</span>
+            </div>
+          )
+        }
+        if (s.kind === 'status') {
+          return (
+            <div key={idx} className="console-line" style={{ color: '#c084fc' }}>
+              <span>ℹ️</span>
+              <span>{s.text}</span>
+            </div>
+          )
+        }
+        return null
+      })}
+    </div>
+  )
+}
+
 // ─── MAIN APPLICATION ────────────────────────────────────────────
 export default function App() {
   const [authChecking, setAuthChecking] = useState(true)
@@ -323,7 +326,6 @@ export default function App() {
   const [tab, setTab] = useState('chat')
   const [showSettings, setShowSettings] = useState(false)
 
-  // Conversations persisted in localStorage
   const [conversations, setConversations] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(CONV_STORAGE_KEY) || '[]')
@@ -336,22 +338,18 @@ export default function App() {
   const [input, setInput] = useState('')
   const [connected, setConnected] = useState(false)
   const [thinking, setThinking] = useState(false)
+  const [liveSteps, setLiveSteps] = useState([])
   const [agentLog, setAgentLog] = useState([])
   const [permissionReq, setPermissionReq] = useState(null)
-  const [plans, setPlans] = useState([])
-  const [memories, setMemories] = useState([])
-  const [memSearch, setMemSearch] = useState('')
-  const [memResults, setMemResults] = useState('')
-  const [latestScreenshot, setLatestScreenshot] = useState(null)
 
   const wsRef = useRef(null)
   const bottomRef = useRef(null)
   const reconnectRef = useRef(null)
+  const liveStepsRef = useRef([])
 
   const activeConv = conversations.find(c => c.id === activeConvId) || conversations[0]
   const messages = activeConv?.messages || []
 
-  // Persist conversations
   useEffect(() => {
     try {
       localStorage.setItem(CONV_STORAGE_KEY, JSON.stringify(conversations.slice(0, 30)))
@@ -382,20 +380,9 @@ export default function App() {
       .finally(() => setAuthChecking(false))
   }, [])
 
-  // Auto-scroll chat
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, thinking, agentLog.length])
-
-  // Load tab data
-  useEffect(() => {
-    if (!authUser) return
-    if (tab === 'plans') {
-      authFetch(`${API_URL}/api/plans`).then(r => r.json()).then(setPlans).catch(() => {})
-    } else if (tab === 'memory') {
-      authFetch(`${API_URL}/api/memory`).then(r => r.json()).then(d => setMemories(d.items || [])).catch(() => {})
-    }
-  }, [tab, authUser])
+  }, [messages.length, liveSteps.length, thinking, agentLog.length])
 
   const appendMessageToActive = useCallback((msg) => {
     setConversations(prev => prev.map(c => {
@@ -408,7 +395,11 @@ export default function App() {
     }))
   }, [activeConvId])
 
-  // WebSocket connection (only after auth)
+  const pushLiveStep = useCallback((step) => {
+    liveStepsRef.current = [...liveStepsRef.current, step]
+    setLiveSteps(liveStepsRef.current)
+  }, [])
+
   const connectWS = useCallback(() => {
     if (!authUser) return
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -429,49 +420,59 @@ export default function App() {
               setThinking(true)
               setAgentLog(prev => [...prev, { type: 'thinking', text: data.content, time: Date.now() }])
               break
+            case 'thought':
+              setThinking(true)
+              pushLiveStep({ kind: 'thought', text: data.content })
+              setAgentLog(prev => [...prev, { type: 'thinking', text: data.content, time: Date.now() }])
+              break
             case 'tool_call':
+              pushLiveStep({ kind: 'tool_call', tool: data.tool, args: data.args })
               setAgentLog(prev => [...prev, { type: 'tool', name: data.tool, args: data.args, time: Date.now() }])
               break
             case 'tool_result':
+              pushLiveStep({ kind: 'tool_result', tool: data.tool, text: data.result })
               setAgentLog(prev => [...prev, { type: 'result', name: data.tool, text: data.result, time: Date.now() }])
-              if (data.tool === 'take_screenshot' && data.result) {
-                try {
-                  const ssData = JSON.parse(data.result)
-                  if (ssData.url) setLatestScreenshot(`${API_URL}${ssData.url}`)
-                } catch {}
-              }
               break
             case 'tool_denied':
+              pushLiveStep({ kind: 'status', text: `🚫 Reddedildi: ${data.command}` })
               setAgentLog(prev => [...prev, { type: 'denied', name: data.tool, command: data.command, time: Date.now() }])
               break
             case 'permission_request':
               setPermissionReq({ command: data.command, tool_call_id: data.tool_call_id })
               break
             case 'status':
+              if (data.content?.includes('Task completed')) {
+                pushLiveStep({ kind: 'success', text: 'Task completed.' })
+              } else {
+                pushLiveStep({ kind: 'status', text: data.content })
+              }
               setAgentLog(prev => [...prev, { type: 'status', text: data.content, time: Date.now() }])
               break
-            case 'plan_update':
-              setPlans(data.plans || [])
-              break
-            case 'response':
+            case 'response': {
               setThinking(false)
-              appendMessageToActive({ role: 'assistant', content: data.content })
+              const stepsSnapshot = liveStepsRef.current
+              liveStepsRef.current = []
+              setLiveSteps([])
+              appendMessageToActive({ role: 'assistant', content: data.content, steps: stepsSnapshot })
               setAgentLog(prev => [...prev, { type: 'response', text: data.content?.substring(0, 200), time: Date.now() }])
               break
-            case 'error':
+            }
+            case 'error': {
               setThinking(false)
-              appendMessageToActive({ role: 'assistant', content: `❌ ${data.content}` })
+              const stepsSnapshot = liveStepsRef.current
+              liveStepsRef.current = []
+              setLiveSteps([])
+              appendMessageToActive({ role: 'assistant', content: `❌ ${data.content}`, steps: stepsSnapshot })
               break
+            }
           }
         } catch {}
       }
     } catch {}
-  }, [authUser, appendMessageToActive])
+  }, [authUser, appendMessageToActive, pushLiveStep])
 
   useEffect(() => {
-    if (authUser) {
-      connectWS()
-    }
+    if (authUser) connectWS()
     return () => {
       clearTimeout(reconnectRef.current)
       wsRef.current?.close()
@@ -481,6 +482,8 @@ export default function App() {
   const sendMessage = (overrideText) => {
     const text = (typeof overrideText === 'string' ? overrideText : input).trim()
     if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
+    liveStepsRef.current = []
+    setLiveSteps([])
     appendMessageToActive({ role: 'user', content: text })
     setAgentLog(prev => [...prev, { type: 'user', text, time: Date.now() }])
     wsRef.current.send(JSON.stringify({ type: 'chat', message: text }))
@@ -494,6 +497,8 @@ export default function App() {
     setConversations(prev => [{ id: newId, title: 'Yeni Sohbet', messages: [] }, ...prev])
     setActiveConvId(newId)
     setTab('chat')
+    liveStepsRef.current = []
+    setLiveSteps([])
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'clear' }))
     }
@@ -530,30 +535,6 @@ export default function App() {
     setConnected(false)
   }
 
-  const searchMemory = async () => {
-    if (!memSearch.trim()) return
-    try {
-      const r = await authFetch(`${API_URL}/api/memory/search?q=${encodeURIComponent(memSearch)}`)
-      const d = await r.json()
-      setMemResults(d.result || 'Sonuç bulunamadı.')
-    } catch { setMemResults('Arama başarısız.') }
-  }
-
-  const deleteMemory = async (memId) => {
-    try {
-      await authFetch(`${API_URL}/api/memory/${memId}`, { method: 'DELETE' })
-      setMemories(prev => prev.filter(m => m.id !== memId))
-    } catch {}
-  }
-
-  const takeScreenshotNow = async () => {
-    try {
-      const r = await authFetch(`${API_URL}/api/screenshot`)
-      const d = await r.json()
-      if (d.url) setLatestScreenshot(`${API_URL}${d.url}`)
-    } catch {}
-  }
-
   if (authChecking) {
     return (
       <div className="auth-wrapper">
@@ -567,14 +548,9 @@ export default function App() {
   }
 
   const NAV_ITEMS = [
-    { id: 'chat', label: 'Sohbet', icon: '💬' },
-    { id: 'terminal', label: 'Terminal', icon: '⌘' },
-    { id: 'plans', label: 'Planlar', icon: '📋' },
-    { id: 'memory', label: 'Hafıza', icon: '🧠' },
-    { id: 'screen', label: 'Ekran', icon: '📸' },
+    { id: 'chat', label: 'Konsol / Sohbet', icon: '⌘' },
+    { id: 'terminal', label: 'Ham İzleme', icon: '📄' },
   ]
-
-  const activeNavLabel = NAV_ITEMS.find(n => n.id === tab)?.label || 'Sohbet'
 
   return (
     <div className="app-shell">
@@ -593,12 +569,11 @@ export default function App() {
         />
       )}
 
-      {/* Left Collapsible Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
         <div className="sidebar-header">
           <div className="brand-row">
             <div className="brand-mark">A</div>
-            <span className="brand-name">ALES</span>
+            <span className="brand-name">ALES Code</span>
           </div>
           <button className="btn btn-secondary" onClick={createNewChat} style={{ padding: '6px 10px', fontSize: 12 }}>
             + Yeni
@@ -606,7 +581,7 @@ export default function App() {
         </div>
 
         <div className="sidebar-section">
-          <div className="sidebar-label">Çalışma Alanı</div>
+          <div className="sidebar-label">Görünüm</div>
           {NAV_ITEMS.map(item => (
             <button
               key={item.id}
@@ -649,20 +624,15 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="main-area">
-        {/* Glassmorphic Top Navbar */}
         <header className="topbar">
           <div className="topbar-left">
-            <button
-              className="btn btn-ghost"
-              onClick={() => setSidebarOpen(v => !v)}
-              style={{ padding: '6px 10px' }}
-              title="Kenar Çubuğu"
-            >
+            <button className="btn btn-ghost" onClick={() => setSidebarOpen(v => !v)} style={{ padding: '6px 10px' }}>
               ☰
             </button>
-            <span className="topbar-title">{activeNavLabel}</span>
+            <span className="topbar-title">
+              {tab === 'chat' ? 'Claude Code 1:1 Konsol' : 'Ham İzleme Günlüğü'}
+            </span>
           </div>
 
           <div className="topbar-right">
@@ -676,24 +646,22 @@ export default function App() {
           </div>
         </header>
 
-        {/* Scrollable View */}
         <div className="content-scroll">
-          {/* ─── CHAT VIEW ─── */}
           {tab === 'chat' && (
             <div className="chat-container">
               {messages.length === 0 && !thinking && (
                 <div className="chat-empty">
                   <div className="auth-logo" style={{ width: 48, height: 48, fontSize: 20 }}>A</div>
-                  <div className="chat-empty-title">Bugün ne inşa edelim?</div>
+                  <div className="chat-empty-title">ALES Otonom Kodlama Ajanı</div>
                   <div className="chat-empty-sub">
-                    Dosya düzenleme, terminal komutları, planlama, uzun süreli hafıza ve ekran kontrolü tek ajan döngüsünde.
+                    6 çekirdek araç (read_file, write_file, edit_file, run_bash, grep_search, glob_search) ile doğrudan uygular.
                   </div>
                   <div className="suggestion-grid">
                     {[
-                      'Proje dosyalarını tara ve özetle',
-                      'Bir Python hesap makinesi uygulaması için plan oluştur',
-                      'Ekran görüntüsü al ve analiz et',
-                      'Önemli proje kararlarını hafızaya kaydet'
+                      "Create a python script that prints 'hello', run it, then change it to 'hello world' using edit_file.",
+                      'Projedeki tüm Python dosyalarını tara ve yapıyı özetle',
+                      'MoviePy ile 5 saniyelik bir video oluşturan Python betiği yaz ve çalıştır',
+                      'Mevcut çalışma dizinindeki dosyaları listele'
                     ].map((prompt, idx) => (
                       <button key={idx} className="suggestion-card" onClick={() => sendMessage(prompt)}>
                         {prompt}
@@ -704,23 +672,30 @@ export default function App() {
               )}
 
               {messages.map((m, i) => (
-                <div key={i} className={`msg-row ${m.role}`}>
-                  {m.role === 'user' ? (
-                    <div className="msg-bubble-user">{m.content}</div>
-                  ) : (
-                    <div className="msg-assistant">
-                      <div className="assistant-avatar">A</div>
-                      <div className="msg-assistant-body">{renderMessageContent(m.content)}</div>
-                    </div>
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {m.role === 'assistant' && m.steps && m.steps.length > 0 && (
+                    <ConsoleStepList steps={m.steps} />
                   )}
+                  <div className={`msg-row ${m.role}`}>
+                    {m.role === 'user' ? (
+                      <div className="msg-bubble-user">{m.content}</div>
+                    ) : (
+                      <div className="msg-assistant">
+                        <div className="assistant-avatar">A</div>
+                        <div className="msg-assistant-body">{m.content}</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
+
+              {liveSteps.length > 0 && <ConsoleStepList steps={liveSteps} />}
 
               {thinking && (
                 <div className="msg-row assistant">
                   <div className="thinking-pill">
                     <span className="pulse-dot" />
-                    <span>ALES düşünüyor...</span>
+                    <span>Ajan çalışıyor...</span>
                   </div>
                 </div>
               )}
@@ -728,11 +703,10 @@ export default function App() {
             </div>
           )}
 
-          {/* ─── TERMINAL VIEW ─── */}
           {tab === 'terminal' && (
             <div className="panel-container">
               <div className="panel-header">
-                <div className="panel-title">Ajan Çalışma Günlüğü</div>
+                <div className="panel-title">Ham ReAct Günlüğü</div>
                 <button className="btn btn-secondary" onClick={() => setAgentLog([])} style={{ fontSize: 12 }}>
                   Temizle
                 </button>
@@ -740,18 +714,17 @@ export default function App() {
               <div className="terminal-log">
                 {agentLog.length === 0 && (
                   <div style={{ color: 'var(--text-muted)', padding: 32, textAlign: 'center' }}>
-                    Henüz aktivite yok. Sohbet sekmesinden bir komut gönderin.
+                    Henüz aktivite yok.
                   </div>
                 )}
                 {agentLog.map((entry, i) => {
                   const timeStr = new Date(entry.time).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                  const icon = TOOL_ICONS[entry.name] || '🛠️'
-                  if (entry.type === 'thinking') return <div key={i} style={{ color: '#fbbf24' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 🧠 {entry.text}</div>
-                  if (entry.type === 'tool') return <div key={i} style={{ color: '#60a5fa' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> {icon} <b>{entry.name}</b>({JSON.stringify(entry.args || {}).substring(0, 120)})</div>
-                  if (entry.type === 'result') return <div key={i} style={{ color: '#4ade80' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> {icon} [{entry.name}] {entry.text?.substring(0, 300)}</div>
-                  if (entry.type === 'denied') return <div key={i} style={{ color: '#f87171' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 🚫 Reddedildi: {entry.command}</div>
+                  if (entry.type === 'thinking') return <div key={i} style={{ color: '#fbbf24' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 🧠 Thinking: {entry.text}</div>
+                  if (entry.type === 'tool') return <div key={i} style={{ color: '#60a5fa' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 🛠️ Tool Call: <b>{entry.name}</b>({JSON.stringify(entry.args || {}).substring(0, 140)})</div>
+                  if (entry.type === 'result') return <div key={i} style={{ color: '#4ade80' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 📄 Output [{entry.name}]: {entry.text?.substring(0, 400)}</div>
+                  if (entry.type === 'denied') return <div key={i} style={{ color: '#f87171' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 🚫 Denied: {entry.command}</div>
                   if (entry.type === 'status') return <div key={i} style={{ color: '#c084fc' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> ℹ️ {entry.text}</div>
-                  if (entry.type === 'response') return <div key={i} style={{ color: '#34d399' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> ✅ Yanıt: {entry.text}</div>
+                  if (entry.type === 'response') return <div key={i} style={{ color: '#34d399' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> ✅ Success: {entry.text}</div>
                   if (entry.type === 'user') return <div key={i} style={{ color: '#e4e4e7' }}><span style={{ color: 'var(--text-muted)' }}>{timeStr}</span> 👤 {entry.text?.substring(0, 200)}</div>
                   return null
                 })}
@@ -759,106 +732,8 @@ export default function App() {
               </div>
             </div>
           )}
-
-          {/* ─── PLANS VIEW ─── */}
-          {tab === 'plans' && (
-            <div className="panel-container">
-              <div className="panel-header">
-                <div className="panel-title">Görev Planları</div>
-                <button className="btn btn-secondary" onClick={() => authFetch(`${API_URL}/api/plans`).then(r => r.json()).then(setPlans).catch(() => {})}>
-                  ↻ Yenile
-                </button>
-              </div>
-              {plans.length === 0 ? (
-                <div className="surface-card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>
-                  Henüz plan yok. Sohbette ALES'ten bir plan oluşturmasını isteyin.
-                </div>
-              ) : plans.map((plan) => (
-                <div key={plan.id} className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>{plan.goal}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{plan.id} · {plan.created_at?.substring(0, 19)}</div>
-                    </div>
-                    <span className="status-badge">{plan.status?.toUpperCase()}</span>
-                  </div>
-                  {plan.steps?.map((step, si) => (
-                    <div key={si} className="plan-step">
-                      <span>{step.status === 'done' ? '✅' : step.status === 'running' ? '⏳' : step.status === 'failed' ? '❌' : '⬜'}</span>
-                      <span style={{ flex: 1, fontSize: 13 }}>{step.title}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{step.status}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ─── MEMORY VIEW ─── */}
-          {tab === 'memory' && (
-            <div className="panel-container">
-              <div className="panel-header">
-                <div className="panel-title">Uzun Süreli Hafıza (ChromaDB)</div>
-                <button className="btn btn-secondary" onClick={() => authFetch(`${API_URL}/api/memory`).then(r => r.json()).then(d => setMemories(d.items || [])).catch(() => {})}>
-                  ↻ Yenile
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  className="input-field"
-                  value={memSearch}
-                  onChange={e => setMemSearch(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && searchMemory()}
-                  placeholder="Hafızada anlamsal arama yapın..."
-                />
-                <button className="btn btn-primary" onClick={searchMemory}>Ara</button>
-              </div>
-              {memResults && (
-                <div className="surface-card" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#86efac', whiteSpace: 'pre-wrap' }}>
-                  {memResults}
-                </div>
-              )}
-              {memories.length === 0 ? (
-                <div className="surface-card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>
-                  Hafıza boş. ALES önemli bilgileri otomatik olarak buraya kaydeder.
-                </div>
-              ) : memories.map((mem) => (
-                <div key={mem.id} className="surface-card" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13 }}>{mem.text}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
-                      [{mem.category}] · {mem.timestamp?.substring(0, 19)}
-                    </div>
-                  </div>
-                  <button className="btn btn-danger" onClick={() => deleteMemory(mem.id)} style={{ padding: '4px 8px', fontSize: 11 }}>
-                    Sil
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ─── SCREEN VIEW ─── */}
-          {tab === 'screen' && (
-            <div className="panel-container">
-              <div className="panel-header">
-                <div className="panel-title">Ekran Görüntüsü</div>
-                <button className="btn btn-primary" onClick={takeScreenshotNow}>📸 Ekran Görüntüsü Al</button>
-              </div>
-              {latestScreenshot ? (
-                <div className="surface-card">
-                  <img src={latestScreenshot} alt="Screen" style={{ width: '100%', maxHeight: '68vh', objectFit: 'contain', borderRadius: 8 }} />
-                </div>
-              ) : (
-                <div className="surface-card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 48 }}>
-                  Henüz ekran görüntüsü alınmadı. Yukarıdaki butona tıklayın veya sohbetten isteyin.
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Chat Composer */}
         {tab === 'chat' && (
           <div className="composer-wrap">
             <div className="composer-box">
@@ -867,7 +742,7 @@ export default function App() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder={connected ? "ALES'e bir görev verin..." : 'Bağlanıyor...'}
+                placeholder={connected ? "ALES'e bir kodlama görevi verin..." : 'Bağlanıyor...'}
                 disabled={!connected}
               />
               <button

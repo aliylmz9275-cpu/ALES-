@@ -632,6 +632,53 @@ button, input, textarea, select {
   animation: pulse 1.4s infinite ease-in-out;
 }
 
+/* Claude Code Inline Console Steps */
+.console-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px 42px;
+  padding: 10px 14px;
+  background: #0c0c0f;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.console-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  word-break: break-word;
+}
+
+.console-thought {
+  color: #fbbf24;
+}
+
+.console-tool {
+  color: #60a5fa;
+}
+
+.console-output {
+  color: #a1a1aa;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid rgba(255, 255, 255, 0.14);
+  padding: 6px 10px;
+  border-radius: 0 6px 6px 0;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.console-success {
+  color: #4ade80;
+  font-weight: 500;
+}
+
 /* Composer */
 .composer-wrap {
   padding: 12px 20px 20px;
