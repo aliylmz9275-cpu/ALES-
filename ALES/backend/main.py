@@ -1,11 +1,14 @@
 """
-main.py — ALES: 1:1 Claude Code Engine
+main.py — ALES: 1:1 Claude Code Engine v7.0
 
-- Strict 6-tool primitives from tool_router.py
-- BASE_SYSTEM from config_manager.py
-- Strict ReAct loop (max 15 iterations) with <thought> extraction
-- Permission gate (permissions.json), Auto-Compact, Project Memory (ALES.md)
-- Access Code SQLite Auth (profile_manager.py)
+Architecture:
+- Strict ReAct loop (max 15 turns): Think → Tool Call → Observation → Repeat
+- 8 Core Primitives: bash, read_file, write_file, edit_file, grep_search, glob_search, task, todo_write
+- Deny-first Permission System with WebSocket gate
+- Auto-Compact at 70% context window
+- Project Memory (ALES.md injection)
+- Sub-Agent isolation via task() tool
+- Access Code SQLite auth (profile_manager.py)
 """
 import asyncio
 import json
@@ -55,11 +58,11 @@ from fastapi.staticfiles import StaticFiles
 
 from config_manager import BASE_SYSTEM, load_config, save_config, get_key
 import profile_manager
-from tool_router import TOOLS, execute_tool, get_cwd
+from tool_router import TOOLS, execute_tool, get_cwd, get_todos
 import voice
 
 # ─── APP ───────────────────────────────────────────────────────────
-app = FastAPI(title="ALES", version="6.0")
+app = FastAPI(title="ALES", version="7.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 MAX_AGENT_TURNS = 15
@@ -82,7 +85,7 @@ def load_ales_md(cwd: str = None) -> str:
     return ""
 
 
-# ─── PERMISSION SYSTEM ─────────────────────────────────────────────
+# ─── PERMISSION SYSTEM (Deny-First) ───────────────────────────────
 _PERMISSIONS_FILE = Path(__file__).parent / "permissions.json"
 _permissions_cache = None
 
@@ -113,14 +116,15 @@ def is_destructive(command: str) -> bool:
 _permission_requests: dict = {}
 _permission_results: dict = {}
 
+
 # ─── AUTO-COMPACT ──────────────────────────────────────────────────
 def estimate_tokens(text: str) -> int:
-    return len(text) // 3
+    return max(1, len(text) // 3)
 
 
 def should_compact(messages: list, max_context: int = 8192) -> bool:
     total = sum(estimate_tokens(json.dumps(m)) for m in messages)
-    return total > int(max_context * 0.7)
+    return total > int(max_context * 0.70)
 
 
 async def auto_compact(messages: list, client_info: tuple) -> list:
@@ -132,7 +136,12 @@ async def auto_compact(messages: list, client_info: tuple) -> list:
     summary_prompt = [
         {
             "role": "system",
-            "content": "Summarize the conversation concisely. Keep: 1) Files created/modified, 2) Current goal, 3) Errors.",
+            "content": (
+                "Summarize this conversation in a dense paragraph. "
+                "Keep: 1) Files created/modified with their paths, "
+                "2) The current goal, 3) Errors encountered and fixes applied. "
+                "Be concise and factual. Output only the summary."
+            ),
         },
         {"role": "user", "content": json.dumps(conversation[-20:], ensure_ascii=False)[:6000]},
     ]
@@ -150,26 +159,34 @@ async def auto_compact(messages: list, client_info: tuple) -> list:
     return result
 
 
-# ─── LLM CLIENTS (Tool Calling Priority) ───────────────────────────
+# ─── LLM CLIENT CHAIN ──────────────────────────────────────────────
 def get_clients() -> list:
-    """Return available (provider, client, model) tuples."""
+    """Return ordered list of (provider, client, model) tuples for fallback."""
     from openai import OpenAI
 
     clients = []
     if k := get_key("groq_key"):
         groq_client = OpenAI(api_key=k, base_url="https://api.groq.com/openai/v1")
-        # llama-3.3-70b-versatile removed (404 since late 2026); primary model is now moonshotai
         clients.append(("groq", groq_client, "moonshotai/kimi-k2-instruct"))
         clients.append(("groq", groq_client, "openai/gpt-oss-120b"))
     if k := get_key("gemini_key"):
-        clients.append(
-            ("gemini", OpenAI(api_key=k, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"), "gemini-2.0-flash")
-        )
+        clients.append((
+            "gemini",
+            OpenAI(api_key=k, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"),
+            "gemini-2.0-flash",
+        ))
     if k := get_key("openrouter_key"):
-        clients.append(("openrouter", OpenAI(api_key=k, base_url="https://openrouter.ai/api/v1"), "qwen/qwen3-72b"))
+        clients.append((
+            "openrouter",
+            OpenAI(api_key=k, base_url="https://openrouter.ai/api/v1"),
+            "qwen/qwen3-72b",
+        ))
     if k := get_key("nvidia_key"):
-        # deepseek-v4-pro EOL (410 since 2026-08-07); replaced with nemotron
-        clients.append(("nvidia", OpenAI(api_key=k, base_url="https://integrate.api.nvidia.com/v1"), "nvidia/llama-3.1-nemotron-70b-instruct"))
+        clients.append((
+            "nvidia",
+            OpenAI(api_key=k, base_url="https://integrate.api.nvidia.com/v1"),
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+        ))
     return clients
 
 
@@ -184,7 +201,7 @@ def get_client():
 _THOUGHT_RE = re.compile(r"<thought>(.*?)</thought>", re.DOTALL | re.IGNORECASE)
 
 
-def _extract_thoughts(text: str) -> tuple[list[str], str]:
+def _extract_thoughts(text: str) -> tuple:
     if not text:
         return [], ""
     thoughts = [t.strip() for t in _THOUGHT_RE.findall(text) if t.strip()]
@@ -194,7 +211,17 @@ def _extract_thoughts(text: str) -> tuple[list[str], str]:
 
 # ─── THE REACT LOOP (STRICT CLAUDE CODE ENGINE) ────────────────────
 async def run_agent(user_message: str, ws: WebSocket = None, conversation_history: list = None):
-    """Strict 15-iteration ReAct loop with <thought> streaming and Observation feedback."""
+    """
+    Strict 15-iteration ReAct loop.
+
+    Flow each turn:
+      1. LLM receives messages + 8-tool schemas
+      2. If <thought> tags present → stream to UI as 🧠
+      3. If tool_calls present → execute tool → append Observation → loop
+      4. If no tool_calls → final answer, return
+      5. On bash failure (stderr / exit!=0) → feed error back, LLM self-corrects
+      6. On LLM error → try next provider in fallback chain
+    """
     clients = get_clients()
     if not clients:
         yield {"type": "error", "content": "❌ API anahtarı yapılandırılmamış. Ayarlar'dan bir API anahtarı girin."}
@@ -206,7 +233,12 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
     model = cfg.get("model") or default_model
 
     cwd = get_cwd()
-    system_prompt = BASE_SYSTEM + load_ales_md(cwd) + f"\n\nCurrent working directory: {cwd}"
+    system_prompt = (
+        BASE_SYSTEM
+        + load_ales_md(cwd)
+        + f"\n\nCurrent working directory: {cwd}"
+        + f"\nDate/time: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
     if conversation_history is None:
         conversation_history = []
@@ -215,16 +247,18 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
 
+    # Auto-compact check
     if should_compact(messages):
-        yield {"type": "status", "content": "🗜️ Auto-compacting context..."}
+        yield {"type": "status", "content": "🗜️ Bağlam çok büyük, otomatik sıkıştırma yapılıyor..."}
         messages = await auto_compact(messages, (provider, client, model))
+        yield {"type": "status", "content": "✅ Auto-compact tamamlandı."}
 
     turn = 0
     used_tools = False
 
     while turn < MAX_AGENT_TURNS:
         turn += 1
-        yield {"type": "thinking", "content": f"Turn {turn}/{MAX_AGENT_TURNS} ({provider}:{model})"}
+        yield {"type": "thinking", "content": f"Turn {turn}/{MAX_AGENT_TURNS} · {provider}:{model}"}
 
         try:
             response = client.chat.completions.create(
@@ -237,34 +271,34 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
             )
             msg = response.choices[0].message
 
-            # Extract <thought> tags and stream them to UI
+            # Stream <thought> tags
             thoughts, clean_text = _extract_thoughts(msg.content or "")
             for th in thoughts:
                 yield {"type": "thought", "content": th}
 
-            # If no tool calls -> final answer
+            # No tool calls → final answer
             if not msg.tool_calls:
                 if used_tools:
-                    yield {"type": "status", "content": "✅ Task completed."}
-                yield {"type": "response", "content": clean_text or "(Done)"}
+                    yield {"type": "status", "content": "✅ Görev tamamlandı."}
+                yield {"type": "response", "content": clean_text or "(Tamamlandı)"}
                 return
 
+            # Append assistant message with tool calls
             used_tools = True
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": msg.content or "",
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                        }
-                        for tc in msg.tool_calls
-                    ],
-                }
-            )
+            messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                    }
+                    for tc in msg.tool_calls
+                ],
+            })
 
+            # Execute each tool call
             for tool_call in msg.tool_calls:
                 fn_name = tool_call.function.name
                 try:
@@ -272,8 +306,8 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
                 except Exception:
                     fn_args = {}
 
-                # Destructive command permission gate
-                if fn_name == "run_bash" and is_destructive(fn_args.get("command", "")):
+                # ── PERMISSION GATE (bash only, deny-first) ──────────
+                if fn_name in ("bash", "run_bash") and is_destructive(fn_args.get("command", "")):
                     cmd = fn_args.get("command", "")
                     yield {"type": "permission_request", "command": cmd, "tool_call_id": tool_call.id}
                     req_id = tool_call.id
@@ -287,7 +321,7 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
                     _permission_requests.pop(req_id, None)
 
                     if not allowed:
-                        observation = "Observation: User denied this command. Try another approach."
+                        observation = "Observation: Kullanıcı bu komutu reddetti. Farklı bir yaklaşım dene."
                         yield {"type": "tool_denied", "tool": fn_name, "command": cmd}
                     else:
                         yield {"type": "tool_call", "tool": fn_name, "args": fn_args}
@@ -295,36 +329,52 @@ async def run_agent(user_message: str, ws: WebSocket = None, conversation_histor
                             EXECUTOR, execute_tool, fn_name, fn_args
                         )
                         observation = f"Observation:\n{raw_out}"
-                        yield {"type": "tool_result", "tool": fn_name, "result": raw_out[:2000]}
+                        yield {"type": "tool_result", "tool": fn_name, "result": raw_out[:3000]}
+
+                # ── TODO_WRITE: also broadcast todos to UI ────────────
+                elif fn_name == "todo_write":
+                    yield {"type": "tool_call", "tool": fn_name, "args": fn_args}
+                    raw_out = await asyncio.get_event_loop().run_in_executor(
+                        EXECUTOR, execute_tool, fn_name, fn_args
+                    )
+                    observation = f"Observation:\n{raw_out}"
+                    yield {"type": "tool_result", "tool": fn_name, "result": raw_out}
+                    # Broadcast updated todos to frontend
+                    yield {"type": "todos", "items": get_todos()}
+
+                # ── ALL OTHER TOOLS ───────────────────────────────────
                 else:
                     yield {"type": "tool_call", "tool": fn_name, "args": fn_args}
                     raw_out = await asyncio.get_event_loop().run_in_executor(
                         EXECUTOR, execute_tool, fn_name, fn_args
                     )
                     observation = f"Observation:\n{raw_out}"
-                    yield {"type": "tool_result", "tool": fn_name, "result": raw_out[:2000]}
+                    yield {"type": "tool_result", "tool": fn_name, "result": raw_out[:3000]}
 
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": observation[:4000],
-                    }
-                )
+                # Append tool result as observation
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": observation[:5000],
+                })
 
         except Exception as e:
+            # Try next provider in fallback chain
             if client_idx + 1 < len(clients):
                 prev_label = f"{provider}:{model}"
                 client_idx += 1
                 provider, client, default_model = clients[client_idx]
                 model = cfg.get("model") or default_model
-                yield {"type": "status", "content": f"⚠️ {prev_label} failed ({str(e)[:80]}), switching to {provider}:{model}..."}
+                yield {
+                    "type": "status",
+                    "content": f"⚠️ {prev_label} hata verdi ({str(e)[:80]}), {provider}:{model} deneniyor...",
+                }
                 turn -= 1
                 continue
-            yield {"type": "error", "content": f"LLM Error: {e}"}
+            yield {"type": "error", "content": f"LLM Hatası: {e}"}
             return
 
-    yield {"type": "response", "content": "⚠️ Maximum agent turns (15) reached. Task may be incomplete."}
+    yield {"type": "response", "content": "⚠️ Maksimum tur sayısına (15) ulaşıldı. Görev tamamlanmamış olabilir."}
 
 
 # ─── WEBSOCKET ENDPOINT ──────────────────────────────────────────
@@ -352,8 +402,9 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json(event)
                     if event["type"] == "response":
                         _conversations[conn_id].append({"role": "assistant", "content": event["content"]})
-                        if len(_conversations[conn_id]) > 40:
-                            _conversations[conn_id] = _conversations[conn_id][-30:]
+                        # Trim history to avoid unbounded growth (keep last 30 exchanges)
+                        if len(_conversations[conn_id]) > 60:
+                            _conversations[conn_id] = _conversations[conn_id][-40:]
 
             elif msg_type == "permission_response":
                 req_id = data.get("tool_call_id")
@@ -364,7 +415,8 @@ async def websocket_endpoint(ws: WebSocket):
 
             elif msg_type == "clear":
                 _conversations[conn_id] = []
-                await ws.send_json({"type": "status", "content": "Conversation cleared."})
+                await ws.send_json({"type": "status", "content": "Konuşma temizlendi."})
+                await ws.send_json({"type": "todos", "items": []})
 
     except WebSocketDisconnect:
         _conversations.pop(conn_id, None)
@@ -379,12 +431,12 @@ def status():
     provider, client = get_client()
     return {
         "status": "running",
-        "version": "6.0",
+        "version": "7.0",
         "provider": provider,
         "has_key": client is not None,
         "cwd": get_cwd(),
         "tools": len(TOOLS),
-        "architecture": "Claude Code 1:1 (6 Primitives)",
+        "architecture": "Claude Code 1:1 (8 Primitives: bash, read_file, write_file, edit_file, grep_search, glob_search, task, todo_write)",
     }
 
 
@@ -511,8 +563,8 @@ if __name__ == "__main__":
     import uvicorn
 
     _port = int(os.environ.get("PORT", 8000))
-    print("[ALES] 1:1 Claude Code Engine (6 Primitives)")
-    print(f"[ALES] Tools: {len(TOOLS)}")
+    print("[ALES] 1:1 Claude Code Engine v7.0")
+    print(f"[ALES] Tools: {len(TOOLS)} (bash, read_file, write_file, edit_file, grep_search, glob_search, task, todo_write)")
     print(f"[ALES] CWD: {get_cwd()}")
     print(f"[ALES] Starting on http://0.0.0.0:{_port}")
     uvicorn.run(app, host="0.0.0.0", port=_port, log_level="warning")
