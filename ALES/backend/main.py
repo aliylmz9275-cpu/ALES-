@@ -158,16 +158,18 @@ def get_clients() -> list:
     clients = []
     if k := get_key("groq_key"):
         groq_client = OpenAI(api_key=k, base_url="https://api.groq.com/openai/v1")
-        clients.append(("groq", groq_client, "llama-3.3-70b-versatile"))
+        # llama-3.3-70b-versatile removed (404 since late 2026); primary model is now moonshotai
+        clients.append(("groq", groq_client, "moonshotai/kimi-k2-instruct"))
         clients.append(("groq", groq_client, "openai/gpt-oss-120b"))
     if k := get_key("gemini_key"):
         clients.append(
-            ("gemini", OpenAI(api_key=k, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"), "gemini-3.8-flash")
+            ("gemini", OpenAI(api_key=k, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"), "gemini-2.0-flash")
         )
     if k := get_key("openrouter_key"):
-        clients.append(("openrouter", OpenAI(api_key=k, base_url="https://openrouter.ai/api/v1"), "qwen/qwen3.8-27b"))
+        clients.append(("openrouter", OpenAI(api_key=k, base_url="https://openrouter.ai/api/v1"), "qwen/qwen3-72b"))
     if k := get_key("nvidia_key"):
-        clients.append(("nvidia", OpenAI(api_key=k, base_url="https://integrate.api.nvidia.com/v1"), "deepseek-ai/deepseek-v4-pro"))
+        # deepseek-v4-pro EOL (410 since 2026-08-07); replaced with nemotron
+        clients.append(("nvidia", OpenAI(api_key=k, base_url="https://integrate.api.nvidia.com/v1"), "nvidia/llama-3.1-nemotron-70b-instruct"))
     return clients
 
 
